@@ -11,7 +11,7 @@
 #SBATCH --time=00:20:00
 
 REPO_ROOT=$(git rev-parse --show-toplevel)
-BUILD_DIR="$REPO_ROOT/build/gpu"
+BUILD_DIR="$REPO_ROOT/build"
 EXECUTABLE="$BUILD_DIR/main/src/sphexa/sphexa-cuda"
 
 module load stack/.2025-06-silent stack/2025-06
