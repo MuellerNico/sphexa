@@ -45,3 +45,10 @@ test/constants.txt
 *.exe
 *.out
 *.app
+
+# Workflow
+out
+*.err
+*.txt
+dump_*.h5
+profile.h5
