@@ -1,8 +1,8 @@
 #!/bin/bash
 
 #SBATCH --job-name=sphexa
-#SBATCH --output=sphexa-%j.out
-#SBATCH --error=sphexa-%j.err
+#SBATCH --output=logs/sphexa-%j.out
+#SBATCH --error=logs/sphexa-%j.err
 
 #SBATCH --gpus=rtx_4090:1 # 24 GB vram
 #SBATCH --ntasks=1
@@ -11,7 +11,7 @@
 #SBATCH --time=00:20:00
 
 REPO_ROOT=$(git rev-parse --show-toplevel)
-BUILD_DIR="$REPO_ROOT/build"
+BUILD_DIR="$REPO_ROOT/build/gpu"
 EXECUTABLE="$BUILD_DIR/main/src/sphexa/sphexa-cuda"
 
 module load stack/.2025-06-silent stack/2025-06
@@ -20,10 +20,16 @@ module list
 
 make -C "$BUILD_DIR" -j sphexa-cuda
 
-rm dump_*.h5
+mkdir -p out/$SLURM_JOB_ID/
 
 export OMP_NUM_THREADS=16
-$EXECUTABLE --init sedov-magneto --prop magneto-ve --glass 50c.h5 -n 100 -s 1000 -w 10 -f x,y,z,rho,p
 
-mkdir -p out/$SLURM_JOB_ID/
-mv *.err *.out dump_*.h5 constants.txt profile.h5 out/$SLURM_JOB_ID/
+$EXECUTABLE \
+    --init alfven-wave \
+    --prop magneto-ve \
+    --glass 50c.h5 \
+    -n 100 \
+    -s 1000 \
+    -w 10 \
+    -f x,y,z,rho,p,Bx,By,Bz
+    -o out/$SLURM_JOB_ID/dump.h5 \
