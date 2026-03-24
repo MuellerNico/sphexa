@@ -253,12 +253,12 @@ public:
         output();
 
         // second output pass: write temporary quantities produced by the EOS
-        release(d, "c11", "c12", "c13");
-        acquire(d, "rho", "p", "gradh");
+        release(d, "c11", "c12");
+        acquire(d, "rho", "p");
         computeEOS(first, last, d);
         output();
-        release(d, "rho", "p", "gradh");
-        acquire(d, "c11", "c12", "c13");
+        release(d, "rho", "p");
+        acquire(d, "c11", "c12");
 
         // third output pass: recover temporary curlv and divv quantities
         release(d, "prho", "c");
