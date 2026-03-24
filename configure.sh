@@ -7,5 +7,11 @@ REPO_ROOT=$(git rev-parse --show-toplevel)
 BUILD_DIR="$REPO_ROOT/build"
 
 rm -rf "$BUILD_DIR/cpu" "$BUILD_DIR/gpu"
+
 cmake -S "$REPO_ROOT" -B "$BUILD_DIR/cpu"
-cmake -S "$REPO_ROOT" -B "$BUILD_DIR/gpu" -DCMAKE_CUDA_ARCHITECTURES="89" # RTX 4090
+CC=mpicc CXX=mpicxx cmake \
+    -S "$REPO_ROOT" \
+    -B "$BUILD_DIR/gpu" \
+    -DCSTONE_WITH_GPU_AWARE_MPI=OFF \
+    -DCMAKE_CUDA_FLAGS=-ccbin=mpicxx \
+    -DCMAKE_CUDA_ARCHITECTURES="89" # rtx 4090

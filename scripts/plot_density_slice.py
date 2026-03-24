@@ -6,6 +6,7 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
+import os
 import sys
 
 
@@ -176,7 +177,8 @@ def plot_density_slice(fname, step):
     ax.set_title(f"Magnetic Sedov, Density, t=[{time}]")
     fig.text(0.78, 0.02, f"Resolution: {n_cbrt}^3", fontsize=10)
 
-    outname = f"slice_rho_step{step}.png"
+    outdir = os.path.dirname(os.path.abspath(fname))
+    outname = os.path.join(outdir, f"slice_rho_step{step}.png")
     plt.tight_layout()
     plt.savefig(outname, dpi=150, bbox_inches='tight')
     print(f"Saved: {outname}")

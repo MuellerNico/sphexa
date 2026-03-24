@@ -24,11 +24,11 @@ mkdir -p out/$SLURM_JOB_ID/
 export OMP_NUM_THREADS=128
 
 $EXECUTABLE \
-    --init alfven-wave \
-    --prop magneto-ve \
+    --init sedov \
+    --prop ve \
     --glass 50c.h5 \
     -n 100 \
-    -s 1000 \
+    -s 100 \
     -w 10 \
-    -f x,y,z,rho,p,Bx,By,Bz
-    -o out/$SLURM_JOB_ID/dump.h5 \
+    -f x,y,z,rho,p,h \
+    -o out/$SLURM_JOB_ID/dump.h5
