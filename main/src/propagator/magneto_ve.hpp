@@ -197,8 +197,8 @@ public:
         sph::magneto::computeMomentumEnergy<avClean>(groups_.view(), nullptr, simData, domain.box());
         timer.step("MomentumAndEnergy");
 
-        domain.exchangeHalos(get<"divB", "curlB_x", "curlB_y", "curlB_z", "psi_ch">(md), get<"divv">(d),
-                             get<"curlv">(d));
+        domain.exchangeHalos(get<"divB", "curlB_x", "curlB_y", "curlB_z", "psi_ch">(md), get<"ax">(d),
+                             get<"keys">(d));
         timer.step("mpi::synchronizeHalos");
 
         sph::magneto::computeInductionAndDissipation(groups_.view(), simData, domain.box());
