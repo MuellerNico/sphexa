@@ -148,6 +148,7 @@ void computeIadFullDivvCurlv(const GroupView& grp, HydroData& d, MagnetoData& m,
         rawPtr(m.devData.dvydy), rawPtr(m.devData.dvydz), rawPtr(m.devData.dvzdx), rawPtr(m.devData.dvzdy),
         rawPtr(m.devData.dvzdz), nidxPool, traversalPool);
 
+    cstone::resetTraversalCounters<<<1, 1>>>();
     divBCurlBGpu<<<TravConfig::numBlocks(), TravConfig::numThreads>>>(
         d.K, d.ngmax, box, grp.groupStart, grp.groupEnd, grp.numGroups, d.treeView, rawPtr(d.devData.x),
         rawPtr(d.devData.y), rawPtr(d.devData.z), rawPtr(m.devData.Bx), rawPtr(m.devData.By), rawPtr(m.devData.Bz),
