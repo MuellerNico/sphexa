@@ -72,14 +72,14 @@ __global__ void inductionDissipationGPU(
         LocalIndex bodyEnd   = grpEnd[targetIdx];
         LocalIndex i         = bodyBegin + laneIdx;
 
+        auto ncTrue = traverseNeighbors(bodyBegin, bodyEnd, x, y, z, h, tree, box, neighborsWarp, ngmax, globalPool);
+
+        if (i >= bodyEnd) continue;
+
         // Induction Equation
         dBx[i] = -Bx[i] * (dvydy[i] + dvzdz[i]) + By[i] * dvxdy[i] + Bz[i] * dvxdz[i];
         dBy[i] = -By[i] * (dvxdx[i] + dvzdz[i]) + Bx[i] * dvydx[i] + Bz[i] * dvydz[i];
         dBz[i] = -Bz[i] * (dvxdx[i] + dvydy[i]) + Bx[i] * dvzdx[i] + By[i] * dvzdy[i];
-
-        auto ncTrue = traverseNeighbors(bodyBegin, bodyEnd, x, y, z, h, tree, box, neighborsWarp, ngmax, globalPool);
-
-        if (i >= bodyEnd) continue;
 
         unsigned ncCapped = stl::min(ncTrue[0], ngmax);
         inductionAndDissipationJLoop<TravConfig::targetSize>(
