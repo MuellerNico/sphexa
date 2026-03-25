@@ -14,4 +14,4 @@ CC=mpicc CXX=mpicxx cmake \
     -B "$BUILD_DIR/gpu" \
     -DCSTONE_WITH_GPU_AWARE_MPI=OFF \
     -DCMAKE_CUDA_FLAGS=-ccbin=mpicxx \
-    -DCMAKE_CUDA_ARCHITECTURES="89" # rtx 4090
+    -DCMAKE_CUDA_ARCHITECTURES="89;80" # rtx 4090

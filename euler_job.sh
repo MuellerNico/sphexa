@@ -4,7 +4,7 @@
 #SBATCH --output=logs/sphexa-%j.out
 #SBATCH --error=logs/sphexa-%j.err
 
-#SBATCH --gpus=rtx_4090:1 # 24 GB vram
+#SBATCH --gpus=a100:1 # rtx_4090:1 # 24 GB vram
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=16
 #SBATCH --mem-per-cpu=2048

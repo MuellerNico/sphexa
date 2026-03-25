@@ -9,4 +9,3 @@ find "./out" -mindepth 1 -type d -empty -delete 2>/dev/null && \
 # Delete generated files from root level
 rm -f "profile.h5" "dump_*.h5" "constants.txt"
 echo "Deleted leftover output from root"
- 
