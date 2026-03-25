@@ -119,8 +119,11 @@ def sph_scatter_to_grid(xs, ys, ds, hs, resolution=256):
     return xi, yi, result
 
 
-def plot_density_slice(fname, step):
-    """Plot a 2D xy-slice of density using SPH kernel interpolation."""
+def render_density_slice(fname, step, resolution=256):
+    """Render a 2D xy-slice of density using SPH kernel interpolation.
+
+    Returns (fig, time_val) so callers can save as PNG or capture for GIF.
+    """
     print(f"Reading step {step} from {fname}...")
     f, h5step = read_step(fname, step)
 
@@ -128,12 +131,12 @@ def plot_density_slice(fname, step):
     y = np.array(h5step["y"])
     z = np.array(h5step["z"])
     rho = np.array(h5step["rho"])
-    
-    time = h5step.attrs["time"][0]
+
+    time_val = h5step.attrs["time"][0]
     n_particles = len(x)
     n_cbrt = round(n_particles ** (1.0 / 3.0), 1)
 
-    print(f"Step {step}: time={time:.8f}, N={n_particles} (~{n_cbrt}^3)")
+    print(f"Step {step}: time={time_val:.8f}, N={n_particles} (~{n_cbrt}^3)")
     print(f"  x: [{x.min():.4f}, {x.max():.4f}]")
     print(f"  y: [{y.min():.4f}, {y.max():.4f}]")
     print(f"  z: [{z.min():.4f}, {z.max():.4f}]")
@@ -160,7 +163,6 @@ def plot_density_slice(fname, step):
     xs, ys, ds, hs = x[mask], y[mask], rho[mask], h[mask]
 
     # SPH kernel scatter onto grid
-    resolution = 512
     print(f"  Interpolating onto {resolution}x{resolution} grid...")
     xi, yi, di = sph_scatter_to_grid(xs, ys, ds, hs, resolution)
 
@@ -174,20 +176,95 @@ def plot_density_slice(fname, step):
 
     ax.set_xlabel("x")
     ax.set_ylabel("y")
-    ax.set_title(f"Magnetic Sedov, Density, t=[{time}]")
+    ax.set_title(f"Magnetic Sedov, Density, t=[{time_val}]")
     fig.text(0.78, 0.02, f"Resolution: {n_cbrt}^3", fontsize=10)
+    plt.tight_layout()
 
+    f.close()
+    return fig, time_val
+
+
+def plot_density_slice(fname, step):
+    """Plot a single 2D xy-slice and save as PNG."""
+    fig, _ = render_density_slice(fname, step)
     outdir = os.path.dirname(os.path.abspath(fname))
     outname = os.path.join(outdir, f"slice_rho_step{step}.png")
-    plt.tight_layout()
-    plt.savefig(outname, dpi=150, bbox_inches='tight')
+    fig.savefig(outname, dpi=150, bbox_inches='tight')
+    plt.close(fig)
     print(f"Saved: {outname}")
-    f.close()
+
+
+def _render_frame(args):
+    """Worker function for parallel GIF generation. Returns (step, png_bytes)."""
+    fname, step, resolution = args
+    fig, _ = render_density_slice(fname, step, resolution)
+    import io
+    buf = io.BytesIO()
+    fig.savefig(buf, format='png', dpi=100, bbox_inches='tight')
+    plt.close(fig)
+    png_bytes = buf.getvalue()
+    buf.close()
+    return step, png_bytes
+
+
+def make_gif(fname, start, end, n_workers=None):
+    """Create an animated GIF from a range of steps.
+
+    Limits to at most 100 frames by striding over the range.
+    Uses multiprocessing to render frames in parallel.
+    """
+    import io
+    from multiprocessing import Pool, cpu_count
+    from PIL import Image
+
+    if n_workers is None:
+        n_workers = min(cpu_count(), 16)
+
+    all_steps = list(range(start, end + 1))
+    max_frames = 100
+    if len(all_steps) > max_frames:
+        stride = len(all_steps) // max_frames
+        steps = all_steps[::stride]
+        print(f"Range has {len(all_steps)} steps, using stride={stride} -> {len(steps)} frames")
+    else:
+        steps = all_steps
+
+    n_total = len(steps)
+    print(f"Generating {n_total} frames using {n_workers} workers...")
+
+    work = [(fname, step, 256) for step in steps]
+    results = {}
+    with Pool(n_workers) as pool:
+        for i, (step, png_bytes) in enumerate(pool.imap_unordered(_render_frame, work)):
+            results[step] = png_bytes
+            print(f"  [{i + 1}/{n_total}] Step {step} done", flush=True)
+
+    # Assemble in order
+    print("Assembling GIF...")
+    frames = []
+    for step in steps:
+        buf = io.BytesIO(results[step])
+        frames.append(Image.open(buf).copy())
+        buf.close()
+
+    outdir = os.path.dirname(os.path.abspath(fname))
+    outname = os.path.join(outdir, f"slice_rho_steps{start}-{end}.gif")
+    frames[0].save(
+        outname,
+        save_all=True,
+        append_images=frames[1:],
+        duration=100,  # ms per frame
+        loop=0,
+    )
+    print(f"Saved GIF ({len(frames)} frames): {outname}")
 
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("Usage: python plot_density_slice.py <hdf5_file> [step | -p]")
+        print("Usage: python plot_density_slice.py <hdf5_file> [step | start-end | -p]")
+        print("  step      Single step number -> PNG")
+        print("  start-end Range of steps (e.g. 0-20) -> animated GIF")
+        print("  -p        Print metadata and exit")
         sys.exit(1)
 
     fname = sys.argv[1]
@@ -196,5 +273,9 @@ if __name__ == "__main__":
         print_metadata(fname)
         sys.exit(0)
 
-    step = int(sys.argv[2])
-    plot_density_slice(fname, step)
+    arg = sys.argv[2]
+    if "-" in arg and not arg.startswith("-"):
+        start, end = arg.split("-", 1)
+        make_gif(fname, int(start), int(end))
+    else:
+        plot_density_slice(fname, int(arg))
