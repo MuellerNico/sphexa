@@ -48,6 +48,8 @@ test/constants.txt
 
 # Workflow
 out
+data
+*.sh
 *.err
 *.txt
 dump_*.h5
