@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 
 import os
 import sys
+import argparse
 
 
 def print_metadata(fname):
@@ -119,27 +120,39 @@ def sph_scatter_to_grid(xs, ys, ds, hs, resolution=256):
     return xi, yi, result
 
 
-def render_density_slice(fname, step, resolution=256):
-    """Render a 2D xy-slice of density using SPH kernel interpolation.
+# Axes to plot for each slice axis (horizontal, vertical)
+_PLOT_AXES = {
+    'z': ('x', 'y'),
+    'y': ('x', 'z'),
+    'x': ('y', 'z'),
+}
+
+
+def render_density_slice(fname, step, resolution=256, slice_axis='z', slice_pos=0.0):
+    """Render a 2D slice of density using SPH kernel interpolation.
+
+    slice_axis: which axis is normal to the slice plane ('x', 'y', or 'z')
+    slice_pos:  coordinate value at which to cut (default 0.0)
 
     Returns (fig, time_val) so callers can save as PNG or capture for GIF.
     """
     print(f"Reading step {step} from {fname}...")
     f, h5step = read_step(fname, step)
 
-    x = np.array(h5step["x"])
-    y = np.array(h5step["y"])
-    z = np.array(h5step["z"])
+    coords = {
+        'x': np.array(h5step["x"]),
+        'y': np.array(h5step["y"]),
+        'z': np.array(h5step["z"]),
+    }
     rho = np.array(h5step["rho"])
 
     time_val = h5step.attrs["time"][0]
-    n_particles = len(x)
+    n_particles = len(coords['x'])
     n_cbrt = round(n_particles ** (1.0 / 3.0), 1)
 
     print(f"Step {step}: time={time_val:.8f}, N={n_particles} (~{n_cbrt}^3)")
-    print(f"  x: [{x.min():.4f}, {x.max():.4f}]")
-    print(f"  y: [{y.min():.4f}, {y.max():.4f}]")
-    print(f"  z: [{z.min():.4f}, {z.max():.4f}]")
+    for ax, vals in coords.items():
+        print(f"  {ax}: [{vals.min():.4f}, {vals.max():.4f}]")
     print(f"  rho: [{rho.min():.6f}, {rho.max():.6f}]")
 
     # Read or estimate smoothing lengths
@@ -147,20 +160,21 @@ def render_density_slice(fname, step, resolution=256):
         h = np.array(h5step["h"])
         print(f"  h: [{h.min():.6f}, {h.max():.6f}], median={np.median(h):.6f}")
     else:
-        # Estimate h from mean particle spacing: h ~ (V/N)^(1/3)
+        x, y, z = coords['x'], coords['y'], coords['z']
         vol = (x.max() - x.min()) * (y.max() - y.min()) * (z.max() - z.min())
         h_est = 1.2 * (vol / n_particles) ** (1.0 / 3.0)
         h = np.full(n_particles, h_est)
         print(f"  h not in file, using estimate h={h_est:.6f}")
 
-    # Select thin z-slice around z=0
-    z_threshold = 2.0 * np.median(h)
-    print(f"  z_threshold = 2*median(h) = {z_threshold:.6f}")
-
-    mask = np.abs(z) < z_threshold
+    # Select particles within their own kernel support of the slice plane
+    mask = np.abs(coords[slice_axis] - slice_pos) < 2.0 * h
     print(f"  Particles in slice: {mask.sum()} / {n_particles} ({mask.sum() / n_particles * 100:.2f}%)")
 
-    xs, ys, ds, hs = x[mask], y[mask], rho[mask], h[mask]
+    ha, va = _PLOT_AXES[slice_axis]
+    xs = coords[ha][mask]
+    ys = coords[va][mask]
+    ds = rho[mask]
+    hs = h[mask]
 
     # SPH kernel scatter onto grid
     print(f"  Interpolating onto {resolution}x{resolution} grid...")
@@ -174,9 +188,9 @@ def render_density_slice(fname, step, resolution=256):
     cbar = fig.colorbar(im, ax=ax, shrink=0.8)
     cbar.set_label("rho")
 
-    ax.set_xlabel("x")
-    ax.set_ylabel("y")
-    ax.set_title(f"Magnetic Sedov, Density, t=[{time_val}]")
+    ax.set_xlabel(ha)
+    ax.set_ylabel(va)
+    ax.set_title(f"Magnetic Sedov, Density, t=[{time_val}]  ({slice_axis}={slice_pos:+.4f})")
     fig.text(0.78, 0.02, f"Resolution: {n_cbrt}^3", fontsize=10)
     plt.tight_layout()
 
@@ -184,11 +198,11 @@ def render_density_slice(fname, step, resolution=256):
     return fig, time_val
 
 
-def plot_density_slice(fname, step):
-    """Plot a single 2D xy-slice and save as PNG."""
-    fig, _ = render_density_slice(fname, step)
+def plot_density_slice(fname, step, slice_axis='z', slice_pos=0.0):
+    """Plot a single 2D slice and save as PNG."""
+    fig, _ = render_density_slice(fname, step, slice_axis=slice_axis, slice_pos=slice_pos)
     outdir = os.path.dirname(os.path.abspath(fname))
-    outname = os.path.join(outdir, f"slice_rho_step{step}.png")
+    outname = os.path.join(outdir, f"slice_rho_step{step}_{slice_axis}{slice_pos:+.4f}.png")
     fig.savefig(outname, dpi=150, bbox_inches='tight')
     plt.close(fig)
     print(f"Saved: {outname}")
@@ -196,8 +210,8 @@ def plot_density_slice(fname, step):
 
 def _render_frame(args):
     """Worker function for parallel GIF generation. Returns (step, png_bytes)."""
-    fname, step, resolution = args
-    fig, _ = render_density_slice(fname, step, resolution)
+    fname, step, resolution, slice_axis, slice_pos = args
+    fig, _ = render_density_slice(fname, step, resolution, slice_axis=slice_axis, slice_pos=slice_pos)
     import io
     buf = io.BytesIO()
     fig.savefig(buf, format='png', dpi=100, bbox_inches='tight')
@@ -207,7 +221,7 @@ def _render_frame(args):
     return step, png_bytes
 
 
-def make_gif(fname, start, end, n_workers=None):
+def make_gif(fname, start, end, n_workers=None, slice_axis='z', slice_pos=0.0):
     """Create an animated GIF from a range of steps.
 
     Limits to at most 100 frames by striding over the range.
@@ -232,7 +246,7 @@ def make_gif(fname, start, end, n_workers=None):
     n_total = len(steps)
     print(f"Generating {n_total} frames using {n_workers} workers...")
 
-    work = [(fname, step, 256) for step in steps]
+    work = [(fname, step, 256, slice_axis, slice_pos) for step in steps]
     results = {}
     with Pool(n_workers) as pool:
         for i, (step, png_bytes) in enumerate(pool.imap_unordered(_render_frame, work)):
@@ -248,7 +262,7 @@ def make_gif(fname, start, end, n_workers=None):
         buf.close()
 
     outdir = os.path.dirname(os.path.abspath(fname))
-    outname = os.path.join(outdir, f"slice_rho_steps{start}-{end}.gif")
+    outname = os.path.join(outdir, f"slice_rho_steps{start}-{end}_{slice_axis}{slice_pos:+.4f}.gif")
     frames[0].save(
         outname,
         save_all=True,
@@ -260,22 +274,32 @@ def make_gif(fname, start, end, n_workers=None):
 
 
 if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print("Usage: python plot_density_slice.py <hdf5_file> [step | start-end | -p]")
-        print("  step      Single step number -> PNG")
-        print("  start-end Range of steps (e.g. 0-20) -> animated GIF")
-        print("  -p        Print metadata and exit")
-        sys.exit(1)
+    parser = argparse.ArgumentParser(
+        description="Plot density slices from SPH HDF5 output.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            "Examples:\n"
+            "  %(prog)s data.h5 -p                    Print metadata\n"
+            "  %(prog)s data.h5 5                     PNG, z=0 slice at step 5\n"
+            "  %(prog)s data.h5 5 --axis x --pos 0.5  PNG, x=0.5 slice at step 5\n"
+            "  %(prog)s data.h5 0-20 --axis y          GIF, y=0 slices for steps 0-20\n"
+        ),
+    )
+    parser.add_argument("file", help="HDF5 input file")
+    parser.add_argument("step", nargs="?", help="Step number, range (e.g. 0-20), or omit for metadata")
+    parser.add_argument("--axis", choices=["x", "y", "z"], default="z",
+                        help="Axis normal to the slice plane (default: z)")
+    parser.add_argument("--pos", type=float, default=0.0,
+                        help="Position along the slice axis (default: 0.0)")
 
-    fname = sys.argv[1]
+    args = parser.parse_args()
 
-    if len(sys.argv) < 3 or sys.argv[2] == "-p":
-        print_metadata(fname)
+    if args.step is None or args.step == "-p":
+        print_metadata(args.file)
         sys.exit(0)
 
-    arg = sys.argv[2]
-    if "-" in arg and not arg.startswith("-"):
-        start, end = arg.split("-", 1)
-        make_gif(fname, int(start), int(end))
+    if "-" in args.step and not args.step.startswith("-"):
+        start, end = args.step.split("-", 1)
+        make_gif(args.file, int(start), int(end), slice_axis=args.axis, slice_pos=args.pos)
     else:
-        plot_density_slice(fname, int(arg))
+        plot_density_slice(args.file, int(args.step), slice_axis=args.axis, slice_pos=args.pos)
