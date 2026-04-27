@@ -54,6 +54,15 @@ struct TuplePlus
     }
 };
 
+struct Tuple2Plus
+{
+    using TT = thrust::tuple<double, double>;
+    HOST_DEVICE_FUN TT operator()(const TT& a, const TT& b) const
+    {
+        return thrust::make_tuple(get<0>(a) + get<0>(b), get<1>(a) + get<1>(b));
+    }
+};
+
 /*! @brief Functor to compute kinetic and internal energy and linear and angular momentum
  *
  * @tparam Tc   type of x,y,z coordinates
@@ -145,7 +154,7 @@ std::tuple<double, double, double> magneticEnergyGpu(Tc mu_0, const Th* xm, cons
     auto it2 = thrust::make_zip_iterator(
         thrust::make_tuple(Bx + last, By + last, Bz + last, divB + last, h + last, xm + last, kx + last));
 
-    auto plus = util::TuplePlus<thrust::tuple<double, double>>{};
+    auto plus = Tuple2Plus{};
     auto init = thrust::make_tuple<double>(0.0, 0.0);
 
     //! apply EMom to each particle and reduce results into a single sum

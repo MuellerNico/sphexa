@@ -45,10 +45,6 @@
 #include "cstone/util/reallocate.hpp"
 #include "sph/types.hpp"
 
-#if defined(USE_CUDA)
-#include "magneto_data_gpu.cuh"
-#endif
-
 namespace sphexa::magneto
 {
 template<class AccType>
@@ -63,10 +59,8 @@ public:
     using Tmass     = sph::SphTypes::Tmass;
 
     template<class ValueType>
-    using PinnedVec = std::vector<ValueType, PinnedAlloc_t<AcceleratorType, ValueType>>;
-
-    template<class ValueType>
-    using FieldVector = std::vector<ValueType, std::allocator<ValueType>>;
+    using FieldVector =
+        std::conditional_t<cstone::HaveGpu<AccType>{}, cstone::DeviceVector<ValueType>, std::vector<ValueType>>;
 
     using FieldVariant = std::variant<FieldVector<float>*, FieldVector<double>*, FieldVector<unsigned>*,
                                       FieldVector<uint64_t>*, FieldVector<uint8_t>*>;
@@ -119,10 +113,6 @@ public:
         "dvzdx",  "dvzdy",    "dvzdz",       "divB",  "curlB_x", "curlB_y", "curlB_z"};
 
     static const inline std::string prefix{"magneto::"};
-
-    static_assert(!cstone::HaveGpu<AcceleratorType>{} ||
-                      fieldNames.size() == DeviceMagneto_t<AccType>::fieldNames.size(),
-                  "MagnetoData on CPU and GPU must have the same fields");
 
     /*! @brief return a tuple of field references
      *

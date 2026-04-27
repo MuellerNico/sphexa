@@ -143,9 +143,7 @@ public:
         size_t first = domain.startIndex();
         size_t last  = domain.endIndex();
 
-        transferToHost(d, first, first + 1, {"m"});
-        fill(get<"m">(d), 0, first, d.m[first]);
-        fill(get<"m">(d), last, domain.nParticlesWithHalos(), d.m[first]);
+        fillMassHalos(get<"m">(d), first, last);
 
         findNeighborsSfc(first, last, d, domain.box());
         computeGroups(first, last, d, domain.box(), groups_);
@@ -249,9 +247,13 @@ public:
                 {
                     int column = std::find(d.outputFieldIndices.begin(), d.outputFieldIndices.end(), fidx) -
                                  d.outputFieldIndices.begin();
-                    transferToHost(d, first, last, {d.fieldNames[fidx]});
-                    std::visit([writer, c = column, key = namesDoneHydro[i]](auto field)
-                               { writer->writeField(key, field->data(), c); }, fieldPointersHydro[fidx]);
+                    std::visit(
+                        [writer, c = column, key = namesDoneHydro[i]](auto field)
+                        {
+                            auto&& tmp = toHost(*field);
+                            writeField(writer, key, tmp.data(), c);
+                        },
+                        fieldPointersHydro[fidx]);
                     indicesDoneHydro.erase(indicesDoneHydro.begin() + i);
                     namesDoneHydro.erase(namesDoneHydro.begin() + i);
                 }
@@ -265,9 +267,13 @@ public:
                     {
                         int column = std::find(md.outputFieldIndices.begin(), md.outputFieldIndices.end(), fidx) -
                                      md.outputFieldIndices.begin();
-                        transferToHost(md, first, last, {md.fieldNames[fidx]});
-                        std::visit([writer, c = column, key = namesDoneMagneto[i]](auto field)
-                                   { writer->writeField(key, field->data(), c); }, fieldPointersMagneto[fidx]);
+                        std::visit(
+                            [writer, c = column, key = namesDoneMagneto[i]](auto field)
+                            {
+                                auto&& tmp = toHost(*field);
+                                writeField(writer, key, tmp.data(), c);
+                            },
+                            fieldPointersMagneto[fidx]);
                         indicesDoneMagneto.erase(indicesDoneMagneto.begin() + i);
                         namesDoneMagneto.erase(namesDoneMagneto.begin() + i);
                     }

@@ -75,6 +75,12 @@ void initAlfvenWaveFields(SimData& sim, const std::map<std::string, double>& con
     auto& d  = sim.hydro;
     auto& md = sim.magneto;
 
+    constexpr bool gpu = cstone::HaveGpu<typename SimData::AcceleratorType>{};
+    using HT           = typename std::decay_t<decltype(d)>::HydroType;
+    using RT           = typename std::decay_t<decltype(md)>::RealType;
+    using XM           = typename std::decay_t<decltype(d)>::XM1Type;
+    using Tmass        = typename std::decay_t<decltype(d)>::Tmass;
+
     T sinA   = constants.at("sinA");
     T sinB   = constants.at("sinB");
     T cosA   = std::sqrt(1. - sinA * sinA);
@@ -89,54 +95,71 @@ void initAlfvenWaveFields(SimData& sim, const std::map<std::string, double>& con
     auto cv   = sph::idealGasCv(d.muiConst, gamma);
     T    temp = p / ((gamma - 1.) * rho) / cv;
 
-    std::fill(d.m.begin(), d.m.end(), massPart);
-    std::fill(d.du_m1.begin(), d.du_m1.end(), 0.0);
-    std::fill(d.mue.begin(), d.mue.end(), 2.0);
-    std::fill(d.mui.begin(), d.mui.end(), 10.0);
-    std::fill(d.alpha.begin(), d.alpha.end(), d.alphamin);
-    std::fill(d.temp.begin(), d.temp.end(), temp);
-    std::fill(d.h.begin(), d.h.end(), h);
+    cstone::fill<gpu>(d.m.begin(), d.m.end(), Tmass(massPart));
+    cstone::fill<gpu>(d.du_m1.begin(), d.du_m1.end(), XM(0.0));
+    cstone::fill<gpu>(d.mue.begin(), d.mue.end(), HT(2.0));
+    cstone::fill<gpu>(d.mui.begin(), d.mui.end(), HT(10.0));
+    cstone::fill<gpu>(d.alpha.begin(), d.alpha.end(), HT(d.alphamin));
+    cstone::fill<gpu>(d.temp.begin(), d.temp.end(), T(temp));
+    cstone::fill<gpu>(d.h.begin(), d.h.end(), HT(h));
 
-    std::fill(md.dBx.begin(), md.dBx.end(), 0.0);
-    std::fill(md.dBy.begin(), md.dBy.end(), 0.0);
-    std::fill(md.dBz.begin(), md.dBz.end(), 0.0);
-    std::fill(md.dBx_m1.begin(), md.dBx_m1.end(), 0.0);
-    std::fill(md.dBy_m1.begin(), md.dBy_m1.end(), 0.0);
-    std::fill(md.dBz_m1.begin(), md.dBz_m1.end(), 0.0);
+    cstone::fill<gpu>(md.dBx.begin(), md.dBx.end(), RT(0.0));
+    cstone::fill<gpu>(md.dBy.begin(), md.dBy.end(), RT(0.0));
+    cstone::fill<gpu>(md.dBz.begin(), md.dBz.end(), RT(0.0));
+    cstone::fill<gpu>(md.dBx_m1.begin(), md.dBx_m1.end(), XM(0.0));
+    cstone::fill<gpu>(md.dBy_m1.begin(), md.dBy_m1.end(), XM(0.0));
+    cstone::fill<gpu>(md.dBz_m1.begin(), md.dBz_m1.end(), XM(0.0));
 
-    std::fill(md.psi_ch.begin(), md.psi_ch.end(), 0.0);
-    std::fill(md.d_psi_ch.begin(), md.d_psi_ch.end(), 0.0);
-    std::fill(md.d_psi_ch_m1.begin(), md.d_psi_ch_m1.end(), 0.0);
+    cstone::fill<gpu>(md.psi_ch.begin(), md.psi_ch.end(), HT(0.0));
+    cstone::fill<gpu>(md.d_psi_ch.begin(), md.d_psi_ch.end(), HT(0.0));
+    cstone::fill<gpu>(md.d_psi_ch_m1.begin(), md.d_psi_ch_m1.end(), XM(0.0));
 
-    T               k = 2 * M_PI / lambda;
-    cstone::Vec3<T> r = {cosA * cosB, cosA * sinB, sinA};
+    T k = 2 * M_PI / lambda;
 
     // estimate max timestep from Alfvèn speed
     auto v_alfven = sqrt((1 + 0.01) / md.mu_0 * rho);
     d.maxDt       = 0.1 * lambda / v_alfven;
 
-#pragma omp parallel for schedule(static)
-    for (std::size_t i = 0; i < d.x.size(); ++i)
-    {
+    auto&& x = toHost(d.x);
+    auto&& y = toHost(d.y);
+    auto&& z = toHost(d.z);
 
-        T               x1     = dot(coordinateTransformToRotated(sinA, sinB)[0], {d.x[i], d.y[i], d.z[i]});
+    const std::size_t  N = d.x.size();
+    std::vector<HT>    vx(N), vy(N), vz(N);
+    std::vector<RT>    Bx(N), By(N), Bz(N);
+    std::vector<XM>    x_m1(N), y_m1(N), z_m1(N);
+
+#pragma omp parallel for schedule(static)
+    for (std::size_t i = 0; i < N; ++i)
+    {
+        T               x1     = dot(coordinateTransformToRotated(sinA, sinB)[0], {x[i], y[i], z[i]});
         T               sinKx1 = std::sin(k * x1);
         T               cosKx1 = std::cos(k * x1);
         cstone::Vec3<T> Vrot   = {0, 0.1 * sinKx1, 0.1 * cosKx1};
         cstone::Vec3<T> Brot   = {1, 0.1 * sinKx1, 0.1 * cosKx1};
 
-        d.vx[i] = dot(coordinateTransformToCartesian(sinA, sinB)[0], Vrot);
-        d.vy[i] = dot(coordinateTransformToCartesian(sinA, sinB)[1], Vrot);
-        d.vz[i] = dot(coordinateTransformToCartesian(sinA, sinB)[2], Vrot);
+        vx[i] = dot(coordinateTransformToCartesian(sinA, sinB)[0], Vrot);
+        vy[i] = dot(coordinateTransformToCartesian(sinA, sinB)[1], Vrot);
+        vz[i] = dot(coordinateTransformToCartesian(sinA, sinB)[2], Vrot);
 
-        md.Bx[i] = dot(coordinateTransformToCartesian(sinA, sinB)[0], Brot);
-        md.By[i] = dot(coordinateTransformToCartesian(sinA, sinB)[1], Brot);
-        md.Bz[i] = dot(coordinateTransformToCartesian(sinA, sinB)[2], Brot);
+        Bx[i] = dot(coordinateTransformToCartesian(sinA, sinB)[0], Brot);
+        By[i] = dot(coordinateTransformToCartesian(sinA, sinB)[1], Brot);
+        Bz[i] = dot(coordinateTransformToCartesian(sinA, sinB)[2], Brot);
 
-        d.x_m1[i] = d.vx[i] * d.minDt;
-        d.y_m1[i] = d.vy[i] * d.minDt;
-        d.z_m1[i] = d.vz[i] * d.minDt;
+        x_m1[i] = vx[i] * d.minDt;
+        y_m1[i] = vy[i] * d.minDt;
+        z_m1[i] = vz[i] * d.minDt;
     }
+
+    d.vx    = std::move(vx);
+    d.vy    = std::move(vy);
+    d.vz    = std::move(vz);
+    md.Bx   = std::move(Bx);
+    md.By   = std::move(By);
+    md.Bz   = std::move(Bz);
+    d.x_m1  = std::move(x_m1);
+    d.y_m1  = std::move(y_m1);
+    d.z_m1  = std::move(z_m1);
 }
 
 template<class SimData>
