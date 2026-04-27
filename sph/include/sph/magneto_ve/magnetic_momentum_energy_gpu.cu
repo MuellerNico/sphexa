@@ -102,7 +102,7 @@ magneticMomentumGpu(Tc K, Tc Kcour, T Atmin, T Atmax, T ramp, unsigned ngmax, co
             T v_alfven2       = (Bx[i] * Bx[i] + By[i] * By[i] + Bz[i] * Bz[i]) / (mu_0 * rhoi);
             T magneticVsignal = std::sqrt(c[i] * c[i] + v_alfven2);
 
-            T dt_lane = maxvsignal > T(0) ? stl::min(Kcour * h[i] / magneticVsignal, Kcour * h[i] / maxvsignal)
+            dt_lane = maxvsignal > T(0) ? stl::min(Kcour * h[i] / magneticVsignal, Kcour * h[i] / maxvsignal)
                                           : Kcour * h[i] / magneticVsignal;
         }
         else { dt_lane = INFINITY; }
