@@ -158,7 +158,7 @@ public:
         timer.step("mpi::synchronizeHalos");
 
         release(d, "ay");
-        computeVeDefGradh(groups_.view(), d, domain.box());
+        computeVe(groups_.view(), d, domain.box());
         timer.step("Normalization & Gradh");
 
         computeEOS(first, last, d);

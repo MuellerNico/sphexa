@@ -39,7 +39,7 @@
 #include "sph/magneto_ve/magneto_data.hpp"
 #include "iad_div_curl.hpp"
 #include "full_divv_curlv_kern.hpp"
-#include "sph/hydro_ve/iad_kern.hpp"
+#include "sph/hydro_ve/iad_gradh_kern.hpp"
 #include "sph/magneto_ve/divB_curlB_kern.hpp"
 
 namespace sph::magneto::cuda
@@ -55,7 +55,7 @@ __global__ void
 fullIadDivvCurlvGpu(Tc K, unsigned ngmax, const cstone::Box<Tc> box, const LocalIndex* grpStart,
                     const LocalIndex* grpEnd, LocalIndex numGroups, const cstone::OctreeNsView<Tc, KeyType> tree,
                     const Tc* x, const Tc* y, const Tc* z, const T* vx, const T* vy, const T* vz, const T* h,
-                    const T* wh, const T* whd, const T* gradh, const T* xm, const T* kx, T* c11, T* c12, T* c13, T* c22,
+                    const Tm* m, const T* wh, const T* whd, T* gradh, const T* xm, const T* kx, T* c11, T* c12, T* c13, T* c22,
                     T* c23, T* c33, T* divv, T* curlv, T* dvxdx, T* dvxdy, T* dvxdz, T* dvydx, T* dvydy, T* dvydz,
                     T* dvzdx, T* dvzdy, T* dvzdz, cstone::LocalIndex* nidx, TreeNodeIndex* globalPool)
 {
@@ -82,8 +82,8 @@ fullIadDivvCurlvGpu(Tc K, unsigned ngmax, const cstone::Box<Tc> box, const Local
         if (i >= bodyEnd) continue;
 
         unsigned ncCapped = stl::min(ncTrue[0], ngmax);
-        IADJLoop<TravConfig::targetSize>(i, K, box, neighborsWarp + laneIdx, ncCapped, x, y, z, h, wh, whd, xm, kx, c11,
-                                         c12, c13, c22, c23, c33);
+        IAD_gradhJLoop<TravConfig::targetSize>(i, K, box, neighborsWarp + laneIdx, ncCapped, x, y, z, h, wh, whd, xm, kx, c11,
+                                         c12, c13, c22, c23, c33, gradh);
         full_divV_curlVJLoop<TravConfig::targetSize>(
             i, K, box, neighborsWarp + laneIdx, ncCapped, x, y, z, vx, vy, vz, h, c11, c12, c13, c22, c23, c33, wh, whd,
             gradh, kx, xm, divv, curlv, dvxdx, dvxdy, dvxdz, dvydx, dvydy, dvydz, dvzdx, dvzdy, dvzdz);
@@ -141,7 +141,7 @@ void computeIadFullDivvCurlv(const GroupView& grp, HydroData& d, MagnetoData& m,
     fullIadDivvCurlvGpu<<<TravConfig::numBlocks(), TravConfig::numThreads>>>(
         d.K, d.ngmax, box, grp.groupStart, grp.groupEnd, grp.numGroups, d.treeView, rawPtr(d.x),
         rawPtr(d.y), rawPtr(d.z), rawPtr(d.vx), rawPtr(d.vy), rawPtr(d.vz),
-        rawPtr(d.h), rawPtr(d.wh), rawPtr(d.whd), rawPtr(d.gradh), rawPtr(d.xm),
+        rawPtr(d.h), rawPtr(d.m), rawPtr(d.wh), rawPtr(d.whd), rawPtr(d.gradh), rawPtr(d.xm),
         rawPtr(d.kx), rawPtr(d.c11), rawPtr(d.c12), rawPtr(d.c13),
         rawPtr(d.c22), rawPtr(d.c23), rawPtr(d.c33), rawPtr(d.divv), d_curlv,
         rawPtr(m.dvxdx), rawPtr(m.dvxdy), rawPtr(m.dvxdz), rawPtr(m.dvydx),

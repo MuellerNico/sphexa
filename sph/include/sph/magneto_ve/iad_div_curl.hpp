@@ -40,7 +40,7 @@ template<class Tc, class SimulationData>
 void computeIadFullDivvCurlvImpl(size_t startIndex, size_t endIndex, SimulationData& sim, const cstone::Box<Tc>& box)
 {
     auto&                     d              = sim.hydro;
-    auto&                     m              = sim.magneto;
+    auto&                     md              = sim.magneto;
     const cstone::LocalIndex* neighbors      = d.neighbors.data();
     const unsigned*           neighborsCount = d.nc.data();
 
@@ -51,6 +51,7 @@ void computeIadFullDivvCurlvImpl(size_t startIndex, size_t endIndex, SimulationD
     const auto* vy = d.vy.data();
     const auto* vz = d.vz.data();
     const auto* h  = d.h.data();
+    const auto* m  = d.m.data();
 
     auto* c11 = d.c11.data();
     auto* c12 = d.c12.data();
@@ -59,32 +60,33 @@ void computeIadFullDivvCurlvImpl(size_t startIndex, size_t endIndex, SimulationD
     auto* c23 = d.c23.data();
     auto* c33 = d.c33.data();
 
-    auto* dvxdx = m.dvxdx.data();
-    auto* dvxdy = m.dvxdy.data();
-    auto* dvxdz = m.dvxdz.data();
-    auto* dvydx = m.dvydx.data();
-    auto* dvydy = m.dvydy.data();
-    auto* dvydz = m.dvydz.data();
-    auto* dvzdx = m.dvzdx.data();
-    auto* dvzdy = m.dvzdy.data();
-    auto* dvzdz = m.dvzdz.data();
+    auto* dvxdx = md.dvxdx.data();
+    auto* dvxdy = md.dvxdy.data();
+    auto* dvxdz = md.dvxdz.data();
+    auto* dvydx = md.dvydx.data();
+    auto* dvydy = md.dvydy.data();
+    auto* dvydz = md.dvydz.data();
+    auto* dvzdx = md.dvzdx.data();
+    auto* dvzdy = md.dvzdy.data();
+    auto* dvzdz = md.dvzdz.data();
 
     const auto* wh    = d.wh.data();
     const auto* whd   = d.whd.data();
     const auto* kx    = d.kx.data();
     const auto* xm    = d.xm.data();
-    const auto* gradh = d.gradh.data();
+    
+    auto* gradh = d.gradh.data();
 
-    const auto* Bx = m.Bx.data();
-    const auto* By = m.By.data();
-    const auto* Bz = m.Bz.data();
+    const auto* Bx = md.Bx.data();
+    const auto* By = md.By.data();
+    const auto* Bz = md.Bz.data();
 
     auto* divv    = d.divv.data();
     auto* curlv   = (d.x.size() == d.curlv.size()) ? d.curlv.data() : nullptr;
-    auto* divB    = m.divB.data();
-    auto* curlB_x = m.curlB_x.data();
-    auto* curlB_y = m.curlB_y.data();
-    auto* curlB_z = m.curlB_z.data();
+    auto* divB    = md.divB.data();
+    auto* curlB_x = md.curlB_x.data();
+    auto* curlB_y = md.curlB_y.data();
+    auto* curlB_z = md.curlB_z.data();
 
 #pragma omp parallel for
     for (size_t i = startIndex; i < endIndex; ++i)
@@ -92,8 +94,8 @@ void computeIadFullDivvCurlvImpl(size_t startIndex, size_t endIndex, SimulationD
         size_t   ni       = i - startIndex;
         unsigned ncCapped = std::min(neighborsCount[i] - 1, d.ngmax);
 
-        IADJLoop(i, d.K, box, neighbors + d.ngmax * ni, ncCapped, x, y, z, h, wh, whd, xm, kx, c11, c12, c13, c22, c23,
-                 c33);
+        IAD_gradhJLoop(i, d.K, box, neighbors + d.ngmax * ni, ncCapped, x, y, z, h, m, wh, whd, xm, kx, c11, c12, c13, c22, c23,
+                 c33, gradh);
 
         full_divV_curlVJLoop(i, d.K, box, neighbors + d.ngmax * ni, ncCapped, x, y, z, vx, vy, vz, h, c11, c12, c13,
                              c22, c23, c33, wh, whd, gradh, kx, xm, divv, curlv, dvxdx, dvxdy, dvxdz, dvydx, dvydy,
