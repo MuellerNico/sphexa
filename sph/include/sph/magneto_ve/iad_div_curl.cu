@@ -132,29 +132,29 @@ template<class HydroData, class MagnetoData>
 void computeIadFullDivvCurlv(const GroupView& grp, HydroData& d, MagnetoData& m,
                              const cstone::Box<typename HydroData::RealType>& box)
 {
-
-    auto [traversalPool, nidxPool] = cstone::allocateNcStacks(d.devData.traversalStack, d.ngmax);
+ 
+    auto [traversalPool, nidxPool] = cstone::allocateNcStacks(d.traversalStack, d.ngmax);
     cstone::resetTraversalCounters<<<1, 1>>>();
 
-    auto* d_curlv = (d.devData.x.size() == d.devData.curlv.size()) ? rawPtr(d.devData.curlv) : nullptr;
+    auto* d_curlv = (d.x.size() == d.curlv.size()) ? rawPtr(d.curlv) : nullptr;
 
     fullIadDivvCurlvGpu<<<TravConfig::numBlocks(), TravConfig::numThreads>>>(
-        d.K, d.ngmax, box, grp.groupStart, grp.groupEnd, grp.numGroups, d.treeView, rawPtr(d.devData.x),
-        rawPtr(d.devData.y), rawPtr(d.devData.z), rawPtr(d.devData.vx), rawPtr(d.devData.vy), rawPtr(d.devData.vz),
-        rawPtr(d.devData.h), rawPtr(d.devData.wh), rawPtr(d.devData.whd), rawPtr(d.devData.gradh), rawPtr(d.devData.xm),
-        rawPtr(d.devData.kx), rawPtr(d.devData.c11), rawPtr(d.devData.c12), rawPtr(d.devData.c13),
-        rawPtr(d.devData.c22), rawPtr(d.devData.c23), rawPtr(d.devData.c33), rawPtr(d.devData.divv), d_curlv,
-        rawPtr(m.devData.dvxdx), rawPtr(m.devData.dvxdy), rawPtr(m.devData.dvxdz), rawPtr(m.devData.dvydx),
-        rawPtr(m.devData.dvydy), rawPtr(m.devData.dvydz), rawPtr(m.devData.dvzdx), rawPtr(m.devData.dvzdy),
-        rawPtr(m.devData.dvzdz), nidxPool, traversalPool);
+        d.K, d.ngmax, box, grp.groupStart, grp.groupEnd, grp.numGroups, d.treeView, rawPtr(d.x),
+        rawPtr(d.y), rawPtr(d.z), rawPtr(d.vx), rawPtr(d.vy), rawPtr(d.vz),
+        rawPtr(d.h), rawPtr(d.wh), rawPtr(d.whd), rawPtr(d.gradh), rawPtr(d.xm),
+        rawPtr(d.kx), rawPtr(d.c11), rawPtr(d.c12), rawPtr(d.c13),
+        rawPtr(d.c22), rawPtr(d.c23), rawPtr(d.c33), rawPtr(d.divv), d_curlv,
+        rawPtr(m.dvxdx), rawPtr(m.dvxdy), rawPtr(m.dvxdz), rawPtr(m.dvydx),
+        rawPtr(m.dvydy), rawPtr(m.dvydz), rawPtr(m.dvzdx), rawPtr(m.dvzdy),
+        rawPtr(m.dvzdz), nidxPool, traversalPool);
 
     divBCurlBGpu<<<TravConfig::numBlocks(), TravConfig::numThreads>>>(
-        d.K, d.ngmax, box, grp.groupStart, grp.groupEnd, grp.numGroups, d.treeView, rawPtr(d.devData.x),
-        rawPtr(d.devData.y), rawPtr(d.devData.z), rawPtr(m.devData.Bx), rawPtr(m.devData.By), rawPtr(m.devData.Bz),
-        rawPtr(d.devData.h), rawPtr(d.devData.wh), rawPtr(d.devData.gradh), rawPtr(d.devData.xm), rawPtr(d.devData.kx),
-        rawPtr(d.devData.c11), rawPtr(d.devData.c12), rawPtr(d.devData.c13), rawPtr(d.devData.c22),
-        rawPtr(d.devData.c23), rawPtr(d.devData.c33), rawPtr(m.devData.divB), rawPtr(m.devData.curlB_x),
-        rawPtr(m.devData.curlB_y), rawPtr(m.devData.curlB_z), nidxPool, traversalPool);
+        d.K, d.ngmax, box, grp.groupStart, grp.groupEnd, grp.numGroups, d.treeView, rawPtr(d.x),
+        rawPtr(d.y), rawPtr(d.z), rawPtr(m.Bx), rawPtr(m.By), rawPtr(m.Bz),
+        rawPtr(d.h), rawPtr(d.wh), rawPtr(d.gradh), rawPtr(d.xm), rawPtr(d.kx),
+        rawPtr(d.c11), rawPtr(d.c12), rawPtr(d.c13), rawPtr(d.c22),
+        rawPtr(d.c23), rawPtr(d.c33), rawPtr(m.divB), rawPtr(m.curlB_x),
+        rawPtr(m.curlB_y), rawPtr(m.curlB_z), nidxPool, traversalPool);
 
     checkGpuErrors(cudaDeviceSynchronize());
 }

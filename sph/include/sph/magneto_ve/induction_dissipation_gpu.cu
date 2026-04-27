@@ -100,20 +100,20 @@ void computeInductionAndDissipationGpu(const GroupView& grp, HydroData& d, Magne
                                        const cstone::Box<typename HydroData::RealType>& box)
 {
 
-    auto [traversalPool, nidxPool] = cstone::allocateNcStacks(d.devData.traversalStack, d.ngmax);
+    auto [traversalPool, nidxPool] = cstone::allocateNcStacks(d.traversalStack, d.ngmax);
     cstone::resetTraversalCounters<<<1, 1>>>();
 
     inductionDissipationGPU<<<TravConfig::numBlocks(), TravConfig::numThreads>>>(
-        d.K, d.ngmax, box, grp.groupStart, grp.groupEnd, grp.numGroups, d.treeView, m.mu_0, rawPtr(d.devData.x),
-        rawPtr(d.devData.y), rawPtr(d.devData.z), rawPtr(d.devData.vx), rawPtr(d.devData.vy), rawPtr(d.devData.vz),
-        rawPtr(d.devData.c), rawPtr(m.devData.Bx), rawPtr(m.devData.By), rawPtr(m.devData.Bz), rawPtr(d.devData.h),
-        rawPtr(d.devData.c11), rawPtr(d.devData.c12), rawPtr(d.devData.c13), rawPtr(d.devData.c22),
-        rawPtr(d.devData.c23), rawPtr(d.devData.c33), rawPtr(d.devData.wh), rawPtr(d.devData.xm), rawPtr(d.devData.kx),
-        rawPtr(d.devData.gradh), rawPtr(d.devData.m), rawPtr(m.devData.dvxdx), rawPtr(m.devData.dvxdy),
-        rawPtr(m.devData.dvxdz), rawPtr(m.devData.dvydx), rawPtr(m.devData.dvydy), rawPtr(m.devData.dvydz),
-        rawPtr(m.devData.dvzdx), rawPtr(m.devData.dvzdy), rawPtr(m.devData.dvzdz), rawPtr(m.devData.psi_ch),
-        rawPtr(m.devData.divB), rawPtr(m.devData.dBx), rawPtr(m.devData.dBy), rawPtr(m.devData.dBz),
-        rawPtr(d.devData.du), rawPtr(m.devData.d_psi_ch), nidxPool, traversalPool);
+        d.K, d.ngmax, box, grp.groupStart, grp.groupEnd, grp.numGroups, d.treeView, m.mu_0, rawPtr(d.x),
+        rawPtr(d.y), rawPtr(d.z), rawPtr(d.vx), rawPtr(d.vy), rawPtr(d.vz),
+        rawPtr(d.c), rawPtr(m.Bx), rawPtr(m.By), rawPtr(m.Bz), rawPtr(d.h),
+        rawPtr(d.c11), rawPtr(d.c12), rawPtr(d.c13), rawPtr(d.c22),
+        rawPtr(d.c23), rawPtr(d.c33), rawPtr(d.wh), rawPtr(d.xm), rawPtr(d.kx),
+        rawPtr(d.gradh), rawPtr(d.m), rawPtr(m.dvxdx), rawPtr(m.dvxdy),
+        rawPtr(m.dvxdz), rawPtr(m.dvydx), rawPtr(m.dvydy), rawPtr(m.dvydz),
+        rawPtr(m.dvzdx), rawPtr(m.dvzdy), rawPtr(m.dvzdz), rawPtr(m.psi_ch),
+        rawPtr(m.divB), rawPtr(m.dBx), rawPtr(m.dBy), rawPtr(m.dBz),
+        rawPtr(d.du), rawPtr(m.d_psi_ch), nidxPool, traversalPool);
 }
 
 template void computeInductionAndDissipationGpu(const GroupView& grp, sphexa::ParticlesData<cstone::GpuTag>& d,

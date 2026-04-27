@@ -72,10 +72,10 @@ void integrateMagneticQuantitiesGpu(const GroupView& grp, MagnetoData& md, doubl
 
     if (numBlocks == 0) { return; }
     magneticIntegrationKernel<<<numBlocks, numThreads>>>(
-        grp, dt, dt_m1, rawPtr(md.devData.Bx), rawPtr(md.devData.By), rawPtr(md.devData.Bz), rawPtr(md.devData.dBx),
-        rawPtr(md.devData.dBy), rawPtr(md.devData.dBz), rawPtr(md.devData.dBx_m1), rawPtr(md.devData.dBy_m1),
-        rawPtr(md.devData.dBz_m1), rawPtr(md.devData.psi_ch), rawPtr(md.devData.d_psi_ch),
-        rawPtr(md.devData.d_psi_ch_m1));
+        grp, dt, dt_m1, rawPtr(md.Bx), rawPtr(md.By), rawPtr(md.Bz), rawPtr(md.dBx),
+        rawPtr(md.dBy), rawPtr(md.dBz), rawPtr(md.dBx_m1), rawPtr(md.dBy_m1),
+        rawPtr(md.dBz_m1), rawPtr(md.psi_ch), rawPtr(md.d_psi_ch),
+        rawPtr(md.d_psi_ch_m1));
 }
 
 template void integrateMagneticQuantitiesGpu(const GroupView& grp, sphexa::magneto::MagnetoData<cstone::GpuTag>& md,

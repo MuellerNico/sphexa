@@ -133,7 +133,7 @@ void computeMagneticMomentumEnergy(const GroupView& grp, float* groupDt, HydroDa
                                    const cstone::Box<typename HydroData::RealType>& box)
 {
 
-    auto [traversalPool, nidxPool] = cstone::allocateNcStacks(d.devData.traversalStack, d.ngmax);
+    auto [traversalPool, nidxPool] = cstone::allocateNcStacks(d.traversalStack, d.ngmax);
 
     float huge = 1e10;
     checkGpuErrors(cudaMemcpyToSymbol(minDt_ve_device, &huge, sizeof(huge)));
@@ -141,15 +141,15 @@ void computeMagneticMomentumEnergy(const GroupView& grp, float* groupDt, HydroDa
 
     magneticMomentumGpu<avClean><<<TravConfig::numBlocks(), TravConfig::numThreads>>>(
         d.K, d.Kcour, d.Atmin, d.Atmax, d.ramp, d.ngmax, box, grp.groupStart, grp.groupEnd, grp.numGroups, d.treeView,
-        m.mu_0, rawPtr(d.devData.x), rawPtr(d.devData.y), rawPtr(d.devData.z), rawPtr(d.devData.vx),
-        rawPtr(d.devData.vy), rawPtr(d.devData.vz), rawPtr(d.devData.h), rawPtr(d.devData.m), rawPtr(d.devData.p),
-        rawPtr(d.devData.tdpdTrho), rawPtr(d.devData.c), rawPtr(d.devData.c11), rawPtr(d.devData.c12),
-        rawPtr(d.devData.c13), rawPtr(d.devData.c22), rawPtr(d.devData.c23), rawPtr(d.devData.c33),
-        rawPtr(d.devData.wh), rawPtr(d.devData.kx), rawPtr(d.devData.xm), rawPtr(d.devData.alpha),
-        rawPtr(m.devData.dvxdx), rawPtr(m.devData.dvxdy), rawPtr(m.devData.dvxdz), rawPtr(m.devData.dvydx),
-        rawPtr(m.devData.dvydy), rawPtr(m.devData.dvydz), rawPtr(m.devData.dvzdx), rawPtr(m.devData.dvzdy),
-        rawPtr(m.devData.dvzdz), rawPtr(m.devData.Bx), rawPtr(m.devData.By), rawPtr(m.devData.Bz),
-        rawPtr(d.devData.gradh), rawPtr(d.devData.ax), rawPtr(d.devData.ay), rawPtr(d.devData.az), rawPtr(d.devData.du),
+        m.mu_0, rawPtr(d.x), rawPtr(d.y), rawPtr(d.z), rawPtr(d.vx),
+        rawPtr(d.vy), rawPtr(d.vz), rawPtr(d.h), rawPtr(d.m), rawPtr(d.p),
+        rawPtr(d.tdpdTrho), rawPtr(d.c), rawPtr(d.c11), rawPtr(d.c12),
+        rawPtr(d.c13), rawPtr(d.c22), rawPtr(d.c23), rawPtr(d.c33),
+        rawPtr(d.wh), rawPtr(d.kx), rawPtr(d.xm), rawPtr(d.alpha),
+        rawPtr(m.dvxdx), rawPtr(m.dvxdy), rawPtr(m.dvxdz), rawPtr(m.dvydx),
+        rawPtr(m.dvydy), rawPtr(m.dvydz), rawPtr(m.dvzdx), rawPtr(m.dvzdy),
+        rawPtr(m.dvzdz), rawPtr(m.Bx), rawPtr(m.By), rawPtr(m.Bz),
+        rawPtr(d.gradh), rawPtr(d.ax), rawPtr(d.ay), rawPtr(d.az), rawPtr(d.du),
         nidxPool, traversalPool, groupDt);
     checkGpuErrors(cudaGetLastError());
 

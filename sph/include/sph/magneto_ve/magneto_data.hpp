@@ -45,8 +45,6 @@
 #include "cstone/util/reallocate.hpp"
 #include "sph/types.hpp"
 
-#include "sph/particles_data_stubs.hpp"
-
 #if defined(USE_CUDA)
 #include "magneto_data_gpu.cuh"
 #endif
@@ -100,8 +98,6 @@ public:
     // Magnetic field spatial derivatives
     FieldVector<HydroType> divB;
     FieldVector<HydroType> curlB_x, curlB_y, curlB_z;
-
-    DeviceMagneto_t<AccType> devData;
 
     /* Is this a good idea?
      *
@@ -194,8 +190,6 @@ public:
                 std::visit([size, gr = allocGrowthRate_](auto* arg) { reallocate(*arg, size, gr); }, data_[i]);
             }
         }
-
-        devData.resize(size, allocGrowthRate_);
     }
 
     size_t size()
@@ -209,20 +203,6 @@ public:
             }
         }
         return 0;
-    }
-
-    //! @brief resize GPU arrays if in use, CPU arrays otherwise
-    void resizeAcc(size_t size)
-    {
-        if (cstone::HaveGpu<AccType>{}) { devData.resize(size, allocGrowthRate_); }
-        else { resize(size); }
-    }
-
-    //! @brief return the size of GPU arrays if in use, CPU arrays otherwise
-    size_t accSize()
-    {
-        if (cstone::HaveGpu<AccType>{}) { return devData.size(); }
-        else { return size(); }
     }
 
     //! @brief particle fields selected for file output

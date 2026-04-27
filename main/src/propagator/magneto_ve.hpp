@@ -106,13 +106,6 @@ public:
         std::apply([&d](auto... f) { d.setDependent(f.value...); }, make_tuple(DependentFieldsHydro{}));
         std::apply([&md](auto... f) { md.setConserved(f.value...); }, make_tuple(ConservedFieldsMagneto{}));
         std::apply([&md](auto... f) { md.setDependent(f.value...); }, make_tuple(DependentFieldsMagneto{}));
-
-        d.devData.setConserved("x", "y", "z", "h", "m");
-        d.devData.setDependent("keys");
-        std::apply([&d](auto... f) { d.devData.setConserved(f.value...); }, make_tuple(ConservedFieldsHydro{}));
-        std::apply([&d](auto... f) { d.devData.setDependent(f.value...); }, make_tuple(DependentFieldsHydro{}));
-        std::apply([&md](auto... f) { md.devData.setConserved(f.value...); }, make_tuple(ConservedFieldsMagneto{}));
-        std::apply([&md](auto... f) { md.devData.setDependent(f.value...); }, make_tuple(DependentFieldsMagneto{}));
     }
 
     void sync(DomainType& domain, DataType& simData) override
@@ -144,8 +137,8 @@ public:
 
         auto& d  = simData.hydro;
         auto& md = simData.magneto;
-        d.resizeAcc(domain.nParticlesWithHalos());
-        md.resizeAcc(domain.nParticlesWithHalos());
+        d.resize(domain.nParticlesWithHalos());
+        md.resize(domain.nParticlesWithHalos());
         resizeNeighbors(d, domain.nParticles() * d.ngmax);
         size_t first = domain.startIndex();
         size_t last  = domain.endIndex();
@@ -238,8 +231,8 @@ public:
 
         auto& d  = simData.hydro;
         auto& md = simData.magneto;
-        d.resize(d.accSize());
-        md.resize(md.accSize());
+        d.resize(d.size());
+        md.resize(md.size());
         auto fieldPointersHydro   = d.data();
         auto indicesDoneHydro     = d.outputFieldIndices;
         auto namesDoneHydro       = d.outputFieldNames;
