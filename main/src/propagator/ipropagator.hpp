@@ -103,6 +103,7 @@ public:
     {
         if (rank_ > 0) { return; } // global particle and nc counts are only valid on rank 0
         const auto& d   = simData.hydro;
+        const auto& md  = simData.magneto;
         const auto& box = domain.box();
 
         auto nodeCount        = domain.globalTree().numLeafNodes;
@@ -125,7 +126,7 @@ public:
             << ", Avg neighbor count per particle: " << avgNcPerParticle << std::endl;
         out << "### Check ### Total time: " << d.ttot - d.minDt << ", current time-step: " << d.minDt << std::endl;
         out << "### Check ### Total energy: " << d.etot << ", (internal: " << d.eint << ", kinetic: " << d.ecin;
-        out << ", gravitational: " << d.egrav;
+        out << ", gravitational: " << d.egrav << ", magnetic: " << md.eMag;
         out << ")" << std::endl;
         out << "### Check ### Focus Tree Nodes: " << domain.focusTree().octreeViewAcc().numLeafNodes << ", maxDepth "
             << domain.focusTree().depth();
@@ -177,6 +178,7 @@ protected:
 
         output(simData.hydro, writer);
         output(simData.chem, writer);
+        output(simData.magneto, writer);
     }
 
     void logDomainStats(const DomainType& domain, ParticleDataType& simData)

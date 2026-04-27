@@ -85,6 +85,7 @@ auto restoreData(IFileReader* reader, SimulationData& simData)
 
     restoreDataset(reader, simData.hydro);
     restoreDataset(reader, simData.chem);
+    restoreDataset(reader, simData.magneto);
 
     return box;
 }

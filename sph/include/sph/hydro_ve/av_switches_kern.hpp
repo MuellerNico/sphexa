@@ -129,7 +129,10 @@ AVswitchesJLoop(cstone::LocalIndex i, Tc K, const cstone::Box<Tc>& box, const cs
         T decay    = hi / (decay_constant * vijsignal_i);
         T alphadot = 0.0;
         if (alphaloc >= alphamin) { alphadot = (alphaloc - alpha_i) / decay; }
-        else { alphadot = (alphamin - alpha_i) / decay; }
+        else
+        {
+            alphadot = (alphamin - alpha_i) / decay;
+        }
         alpha_i += alphadot * dt;
     }
 

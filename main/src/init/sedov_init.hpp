@@ -63,8 +63,7 @@ void initSedovFields(Dataset& d, const std::map<std::string, double>& constants)
     // We distribute energy as exp(-r2 / width2), with width taken as the current 2h, so that the enery
     // is deposited in about ng0 neighbors.
     // ener0 is the constant that should multiply the Gaussian so that its integral equals energytotal
-    double ener0  = constants.at("energyTotal") / std::pow(M_PI, 1.5) / width2 / width;
-
+    double ener0 = constants.at("energyTotal") / std::pow(M_PI, 1.5) / width2 / width;
 
     cstone::fill<gpu>(d.m.begin(), d.m.end(), mPart);
     cstone::fill<gpu>(d.h.begin(), d.h.end(), hInit);
@@ -104,7 +103,10 @@ void initSedovFields(Dataset& d, const std::map<std::string, double>& constants)
         std::for_each(u.begin(), u.end(), [cvm1 = 1.0 / cv](auto& t) { t *= cvm1; });
         d.temp = std::move(u);
     }
-    else { d.u = std::move(u); }
+    else
+    {
+        d.u = std::move(u);
+    }
 }
 
 template<class Dataset>
@@ -155,6 +157,7 @@ public:
 template<class Dataset>
 class SedovGlass : public ISimInitializer<Dataset>
 {
+protected:
     std::string          glassBlock;
     mutable InitSettings settings_;
 
@@ -211,6 +214,75 @@ public:
     }
 
     const InitSettings& constants() const override { return settings_; }
+};
+
+template<class HydroData, class MagnetoData>
+void initMagnetoFields(MagnetoData& md, HydroData& d, const std::map<std::string, double>& constants)
+{
+
+    auto Bmag = constants.at("Bmag");
+    using T   = typename HydroData::RealType;
+
+    std::fill(md.Bx.begin(), md.Bx.end(), Bmag / sqrt(2.));
+    std::fill(md.By.begin(), md.By.end(), 0.0);
+    std::fill(md.Bz.begin(), md.Bz.end(), Bmag / sqrt(2.));
+
+    std::fill(md.dBx.begin(), md.dBx.end(), 0.0);
+    std::fill(md.dBy.begin(), md.dBy.end(), 0.0);
+    std::fill(md.dBz.begin(), md.dBz.end(), 0.0);
+    std::fill(md.dBx_m1.begin(), md.dBx_m1.end(), 0.0);
+    std::fill(md.dBy_m1.begin(), md.dBy_m1.end(), 0.0);
+    std::fill(md.dBz_m1.begin(), md.dBz_m1.end(), 0.0);
+
+    std::fill(md.psi_ch.begin(), md.psi_ch.end(), 0.0);
+    std::fill(md.d_psi_ch.begin(), md.d_psi_ch.end(), 0.0);
+    std::fill(md.d_psi_ch_m1.begin(), md.d_psi_ch_m1.end(), 0.0);
+
+    auto cv       = sph::idealGasCv(d.muiConst, d.gamma);
+    T    p_in     = 100.;
+    T    p_out    = 1.;
+    T    temp_in  = p_in / ((d.gamma - 1.) * constants.at("rho0")) / cv;
+    T    temp_out = p_out / ((d.gamma - 1.) * constants.at("rho0")) / cv;
+
+#pragma omp parallel for schedule(static)
+    for (size_t i = 0; i < md.Bx.size(); ++i)
+    {
+        T r = sqrt(d.x[i] * d.x[i] + d.y[i] * d.y[i] + d.z[i] * d.z[i]);
+        if (r <= 0.125) { d.temp[i] = temp_in; }
+        else
+        {
+            d.temp[i] = temp_out;
+        }
+    }
+}
+
+template<class SimData>
+class SedovMagneto : public SedovGlass<SimData>
+{
+    std::string          glassBlock = SedovGlass<SimData>::glassBlock;
+    mutable InitSettings settings_;
+
+public:
+    SedovMagneto(std::string initBlock, std::string settingsFile, IFileReader* reader)
+        : SedovGlass<SimData>(initBlock, settingsFile, reader)
+    {
+        SimData sim;
+        settings_ = buildSettings(sim, magneticSedovConstants(), settingsFile, reader);
+    }
+
+    cstone::Box<typename SimData::RealType> init(int rank, int numRanks, size_t cbrtNumPart, SimData& simData,
+                                                 IFileReader* reader) const override
+    {
+        auto  box = SedovGlass<SimData>::init(rank, numRanks, cbrtNumPart, simData, reader);
+        auto& md  = simData.magneto;
+        md.resize(simData.hydro.x.size());
+        initMagnetoFields(md, simData.hydro, settings_);
+
+        settings_["numParticlesGlobal"] = double(simData.hydro.numParticlesGlobal);
+        BuiltinWriter attributeSetter(settings_);
+        simData.hydro.loadOrStoreAttributes(&attributeSetter);
+        return box;
+    }
 };
 
 } // namespace sphexa

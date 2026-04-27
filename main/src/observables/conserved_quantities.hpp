@@ -65,10 +65,10 @@ auto localConservedQuantities(size_t startIndex, size_t endIndex, Dataset& d)
     double sharedCv = sph::idealGasCv(d.muiConst, d.gamma);
     bool   haveMui  = !d.mui.empty();
 
-#pragma omp declare reduction(+ : util::array <double, 3> : omp_out += omp_in) initializer(omp_priv(omp_orig))
+#pragma omp declare reduction(+ : util::array<double, 3> : omp_out += omp_in) initializer(omp_priv(omp_orig))
 
     double eKin = 0.0;
-#pragma omp parallel for reduction(+ : eKin, linmom, angmom)
+#pragma omp         parallel for reduction(+ : eKin, linmom, angmom)
     for (size_t i = startIndex; i < endIndex; i++)
     {
         util::array<double, 3> X{x[i], y[i], z[i]};
@@ -84,7 +84,7 @@ auto localConservedQuantities(size_t startIndex, size_t endIndex, Dataset& d)
 
     if (!d.u.empty())
     {
-#pragma omp parallel for reduction(+ : eInt)
+#pragma omp         parallel for reduction(+ : eInt)
         for (size_t i = startIndex; i < endIndex; i++)
         {
             auto mi = m[i];
@@ -106,6 +106,40 @@ auto localConservedQuantities(size_t startIndex, size_t endIndex, Dataset& d)
     return std::make_tuple(0.5 * eKin, eInt, linmom, angmom);
 }
 
+template<class Dataset>
+auto localMagneticEnergy(size_t first, size_t last, const Dataset& simData)
+{
+    const auto* divB = simData.magneto.divB.data();
+    const auto* h    = simData.hydro.h.data();
+    const auto* kx   = simData.hydro.kx.data();
+    const auto* xm   = simData.hydro.xm.data();
+    const auto* Bx   = simData.magneto.Bx.data();
+    const auto* By   = simData.magneto.By.data();
+    const auto* Bz   = simData.magneto.Bz.data();
+    auto        mu_0 = simData.magneto.mu_0;
+
+    double eMag                = 0.0;
+    double cumulativeDivBError = 0.0;
+    double maxDivBError        = 0.0;
+#pragma omp parallel for reduction(+ : eMag, cumulativeDivBError)
+    for (size_t i = first; i < last; i++)
+    {
+        double Bsq = Bx[i] * Bx[i] + By[i] * By[i] + Bz[i] * Bz[i];
+        // The volume of particle i is given as xm[i]/kx[i]
+        eMag += Bsq * xm[i] / kx[i];
+        cumulativeDivBError += h[i] * abs(divB[i]) / sqrt(Bsq);
+    }
+
+#pragma omp parallel for reduction(max : maxDivBError)
+    for (size_t i = first; i < last; i++)
+    {
+        double localDivBError = h[i] * abs(divB[i]) / sqrt(Bx[i] * Bx[i] + By[i] * By[i] + Bz[i] * Bz[i]);
+        if (localDivBError > maxDivBError) { maxDivBError = localDivBError; }
+    }
+
+    return std::make_tuple(0.5 * eMag / mu_0, cumulativeDivBError, maxDivBError);
+}
+
 /*! @brief Computation of globally conserved quantities
  *
  * @tparam        T            float or double
@@ -115,11 +149,15 @@ auto localConservedQuantities(size_t startIndex, size_t endIndex, Dataset& d)
  * @param[inout]  d            particle data set
  */
 template<class Dataset>
-void computeConservedQuantities(size_t startIndex, size_t endIndex, Dataset& d, MPI_Comm comm)
+void computeConservedQuantities(size_t startIndex, size_t endIndex, Dataset& simData, MPI_Comm comm)
 {
     double               eKin, eInt;
+    double               eMag = 0.0, cumulativeDivBError = 0.0, localMaxDivBError = 0.0;
     cstone::Vec3<double> linmom, angmom;
     size_t               ncsum = 0;
+
+    auto& d  = simData.hydro;
+    auto& md = simData.magneto;
 
     if constexpr (cstone::HaveGpu<typename Dataset::AcceleratorType>{})
     {
@@ -127,6 +165,13 @@ void computeConservedQuantities(size_t startIndex, size_t endIndex, Dataset& d, 
         std::tie(eKin, eInt, linmom, angmom) = conservedQuantitiesGpu(
             sph::idealGasCv(d.muiConst, d.gamma), rawPtr(d.x), rawPtr(d.y), rawPtr(d.z), rawPtr(d.vx), rawPtr(d.vy),
             rawPtr(d.vz), rawPtr(d.temp), rawPtr(d.u), rawPtr(d.m), startIndex, endIndex);
+
+        if (!md.Bx.empty())
+        {
+            std::tie(eMag, cumulativeDivBError, localMaxDivBError) =
+                magneticEnergyGpu(md.mu_0, rawPtr(d.xm), rawPtr(d.kx), rawPtr(md.divB), rawPtr(d.h), rawPtr(md.Bx),
+                                  rawPtr(md.By), rawPtr(md.Bz), startIndex, endIndex);
+        }
     }
     else
     {
@@ -140,10 +185,14 @@ void computeConservedQuantities(size_t startIndex, size_t endIndex, Dataset& d, 
         }
 
         std::tie(eKin, eInt, linmom, angmom) = localConservedQuantities(startIndex, endIndex, d);
+        if (md.Bx.size() == d.x.size())
+        {
+            std::tie(eMag, cumulativeDivBError, localMaxDivBError) = localMagneticEnergy(startIndex, endIndex, sim);
+        }
     }
     d.localNeighbors = ncsum;
 
-    util::array<double, 11> quantities, globalQuantities;
+    util::array<double, 13> quantities, globalQuantities;
     std::fill(globalQuantities.begin(), globalQuantities.end(), double(0));
 
     quantities[0]  = eKin;
@@ -157,13 +206,21 @@ void computeConservedQuantities(size_t startIndex, size_t endIndex, Dataset& d, 
     quantities[8]  = angmom[2];
     quantities[9]  = double(ncsum);
     quantities[10] = double(endIndex - startIndex);
+    quantities[11] = eMag;
+    quantities[12] = cumulativeDivBError;
 
     MPI_Reduce(quantities.data(), globalQuantities.data(), quantities.size(), MpiType<double>{}, MPI_SUM, 0, comm);
 
-    d.ecin  = globalQuantities[0];
-    d.eint  = globalQuantities[1];
-    d.egrav = globalQuantities[2];
-    d.etot  = d.ecin + d.eint + d.egrav;
+    double globalMaxDivBErr = 0.0;
+    MPI_Reduce(&localMaxDivBError, &globalMaxDivBErr, 1, MpiType<double>{}, MPI_MAX, rootRank, comm);
+
+    d.ecin           = globalQuantities[0];
+    d.eint           = globalQuantities[1];
+    d.egrav          = globalQuantities[2];
+    md.eMag          = globalQuantities[11];
+    md.meanDivBError = globalQuantities[12] / d.numParticlesGlobal;
+    md.maxDivBError  = globalMaxDivBErr;
+    d.etot           = d.ecin + d.eint + d.egrav + md.eMag;
 
     util::array<double, 3> globalLinmom{globalQuantities[3], globalQuantities[4], globalQuantities[5]};
     util::array<double, 3> globalAngmom{globalQuantities[6], globalQuantities[7], globalQuantities[8]};

@@ -121,7 +121,8 @@ int main(int argc, char** argv)
     propagator->load(initCond, fileReader.get());
     auto box = simInit->init(rank, numRanks, problemSize, simData, fileReader.get());
 
-    auto& d = simData.hydro;
+    auto& d  = simData.hydro;
+    auto& md = simData.magneto;
     simData.setOutputFields(outputFields.empty() ? propagator->conservedFields() : outputFields);
 
     if (parser.exists("--G")) { d.g = parser.get<double>("--G"); }
@@ -225,9 +226,7 @@ bool syncedWallClockElapsed(float totalTimeElapsed, float wallClockLimit, float 
 }
 
 int getNumLocalRanks(int defValue)
-{
-    return getenv("SLURM_NTASKS_PER_NODE") == nullptr ? defValue : std::stoi(getenv("SLURM_NTASKS_PER_NODE"));
-}
+{ return getenv("SLURM_NTASKS_PER_NODE") == nullptr ? defValue : std::stoi(getenv("SLURM_NTASKS_PER_NODE")); }
 
 void printHelp(char* name, int rank)
 {

@@ -55,8 +55,7 @@ auto accelerationTimestep(size_t first, size_t last, const Dataset& d)
     T minH2_A2 = std::numeric_limits<T>::infinity();
     if constexpr (cstone::HaveGpu<typename Dataset::AcceleratorType>{})
     {
-        minH2_A2 = accelerationTimestepGPU(first, last, rawPtr(d.ax), rawPtr(d.ay),
-                                           rawPtr(d.az), rawPtr(d.h));
+        minH2_A2 = accelerationTimestepGPU(first, last, rawPtr(d.ax), rawPtr(d.ay), rawPtr(d.az), rawPtr(d.h));
     }
     else
     {
@@ -104,7 +103,8 @@ void computeTimestep(size_t first, size_t last, Dataset& d, Ts... extraTimesteps
 
     T minDtAcc = (d.g != 0.0) ? accelerationTimestep(first, last, d) : INFINITY;
 
-    T minDtLoc = std::min({minDtAcc, d.minDtCourant, d.minDtRho, d.maxDtIncrease * d.minDt, extraTimesteps...});
+    T minDtLoc =
+        std::min({minDtAcc, d.minDtCourant, d.minDtRho, d.maxDtIncrease * d.minDt, d.maxDt, extraTimesteps...});
 
     util::array<T, 4> varsIn{minDtLoc, 0, 0, -T(d.size() - last + first)}, varsOut;
     if constexpr (cstone::HaveGpu<typename Dataset::AcceleratorType>{})

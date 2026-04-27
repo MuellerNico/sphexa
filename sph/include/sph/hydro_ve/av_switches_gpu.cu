@@ -76,9 +76,9 @@ __global__ void AVswitchesGpu(Tc K, unsigned ngmax, const cstone::Box<Tc> box, c
         if (i >= bodyEnd) continue;
 
         unsigned ncCapped = stl::min(ncTrue[0], ngmax);
-        alpha[i] = AVswitchesJLoop<TravConfig::targetSize>(i, K, box, neighborsWarp + laneIdx, ncCapped, x, y, z, vx,
-                                                           vy, vz, h, c, c11, c12, c13, c22, c23, c33, wh, whd, kx, xm,
-                                                           divv, minDt, alphamin, alphamax, decay_constant, alpha[i]);
+        alpha[i]          = AVswitchesJLoop<TravConfig::targetSize>(
+            i, K, box, neighborsWarp + laneIdx, ncCapped, x, y, z, vx, vy, vz, h, c, c11, c12, c13, c22, c23, c33, wh,
+            whd, kx, xm, divv, minDt, alphamin, alphamax, decay_constant, alpha[i]);
     }
 }
 

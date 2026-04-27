@@ -57,7 +57,10 @@ std::array<double, 3> localGrowthRate(size_t startIndex, size_t endIndex, const 
         Tc voli = xm[i] / kx[i];
         Tc aux;
         if (y[i] < ybox * 0.5) { aux = std::exp(-4.0 * M_PI * std::abs(y[i] - 0.25)); }
-        else { aux = std::exp(-4.0 * M_PI * std::abs(ybox - y[i] - 0.25)); }
+        else
+        {
+            aux = std::exp(-4.0 * M_PI * std::abs(ybox - y[i] - 0.25));
+        }
         Tc si = vy[i] * voli * std::sin(4.0 * M_PI * x[i]) * aux;
         Tc ci = vy[i] * voli * std::cos(4.0 * M_PI * x[i]) * aux;
         Tc di = voli * aux;
@@ -92,9 +95,8 @@ T computeKHGrowthRate(size_t startIndex, size_t endIndex, Dataset& d, const csto
 
     if constexpr (cstone::HaveGpu<typename Dataset::AcceleratorType>{})
     {
-        std::tie(localSum[0], localSum[1], localSum[2]) =
-            gpuGrowthRate(rawPtr(d.x), rawPtr(d.y), rawPtr(d.vy), rawPtr(d.xm),
-                          rawPtr(d.kx), box, startIndex, endIndex);
+        std::tie(localSum[0], localSum[1], localSum[2]) = gpuGrowthRate(
+            rawPtr(d.x), rawPtr(d.y), rawPtr(d.vy), rawPtr(d.xm), rawPtr(d.kx), box, startIndex, endIndex);
     }
     else
     {
@@ -126,7 +128,7 @@ public:
     void computeAndWrite(Dataset& simData, size_t firstIndex, size_t lastIndex, const cstone::Box<T>& box)
     {
         auto& d = simData.hydro;
-        computeConservedQuantities(firstIndex, lastIndex, d, simData.comm);
+        computeConservedQuantities(firstIndex, lastIndex, simData, simData.comm);
         double khgr = computeKHGrowthRate<T>(firstIndex, lastIndex, d, box, simData.comm);
 
         int rank;

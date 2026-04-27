@@ -69,10 +69,12 @@ double calculateMachRMS(size_t first, size_t last, Dataset& d, MPI_Comm comm)
 
     if constexpr (cstone::HaveGpu<typename Dataset::AcceleratorType>{})
     {
-        localMachRms = machSquareSumGpu(rawPtr(d.vx), rawPtr(d.vy), rawPtr(d.vz),
-                                        rawPtr(d.c), first, last);
+        localMachRms = machSquareSumGpu(rawPtr(d.vx), rawPtr(d.vy), rawPtr(d.vz), rawPtr(d.c), first, last);
     }
-    else { localMachRms = localMachSquareSum(first, last, d); }
+    else
+    {
+        localMachRms = localMachSquareSum(first, last, d);
+    }
 
     int    rootRank = 0;
     double globalMachRms;
@@ -99,7 +101,7 @@ public:
     void computeAndWrite(Dataset& simData, size_t firstIndex, size_t lastIndex, const cstone::Box<T>& /*box*/)
     {
         auto& d = simData.hydro;
-        computeConservedQuantities(firstIndex, lastIndex, d, simData.comm);
+        computeConservedQuantities(firstIndex, lastIndex, simData, simData.comm);
         double machRms = calculateMachRMS(firstIndex, lastIndex, d, simData.comm);
 
         int rank;
