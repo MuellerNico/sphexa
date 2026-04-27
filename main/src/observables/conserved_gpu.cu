@@ -34,7 +34,8 @@
 #include <thrust/iterator/zip_iterator.h>
 #include <thrust/transform_reduce.h>
 #include <thrust/tuple.h>
-#include <thrust/extrema.h>
+#include <thrust/reduce.h>
+#include <thrust/functional.h>
 
 #include "conserved_gpu.h"
 
@@ -149,9 +150,9 @@ std::tuple<double, double, double> magneticEnergyGpu(Tc mu_0, const Th* xm, cons
 
     //! apply EMom to each particle and reduce results into a single sum
     auto [BMag, cumulativeDivBError] = thrust::transform_reduce(thrust::device, it1, it2, EMag<Tc, Tc>{}, init, plus);
-    auto localMaxDivBError           = thrust::max_element(thrust::device, divB + first, divB + last);
+    auto localMaxDivBError           = thrust::reduce(thrust::device, divB + first, divB + last, Th(0), thrust::maximum<Th>{});
 
-    return {0.5 * BMag / mu_0, cumulativeDivBError, *localMaxDivBError};
+    return {0.5 * BMag / mu_0, cumulativeDivBError, localMaxDivBError};
 }
 
 #define EMAG(Tc, Th)                                                                                                   \
