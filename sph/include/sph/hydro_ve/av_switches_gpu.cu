@@ -76,9 +76,9 @@ __global__ void AVswitchesGpu(Tc K, unsigned ngmax, const cstone::Box<Tc> box, c
         if (i >= bodyEnd) continue;
 
         unsigned ncCapped = stl::min(ncTrue[0], ngmax);
-        alpha[i]          = AVswitchesJLoop<TravConfig::targetSize>(
-            i, K, box, neighborsWarp + laneIdx, ncCapped, x, y, z, vx, vy, vz, h, c, c11, c12, c13, c22, c23, c33, wh,
-            whd, kx, xm, divv, minDt, alphamin, alphamax, decay_constant, alpha[i]);
+        alpha[i] = AVswitchesJLoop<TravConfig::targetSize>(i, K, box, neighborsWarp + laneIdx, ncCapped, x, y, z, vx,
+                                                           vy, vz, h, c, c11, c12, c13, c22, c23, c33, wh, whd, kx, xm,
+                                                           divv, minDt, alphamin, alphamax, decay_constant, alpha[i]);
     }
 }
 
@@ -89,12 +89,11 @@ void computeAVswitches(const GroupView& grp, Dataset& d, const cstone::Box<typen
     cstone::resetTraversalCounters<<<1, 1>>>();
 
     AVswitchesGpu<<<TravConfig::numBlocks(), TravConfig::numThreads>>>(
-        d.K, d.ngmax, box, grp.groupStart, grp.groupEnd, grp.numGroups, d.treeView, rawPtr(d.x),
-        rawPtr(d.y), rawPtr(d.z), rawPtr(d.vx), rawPtr(d.vy), rawPtr(d.vz),
-        rawPtr(d.h), rawPtr(d.c), rawPtr(d.c11), rawPtr(d.c12), rawPtr(d.c13),
-        rawPtr(d.c22), rawPtr(d.c23), rawPtr(d.c33), rawPtr(d.wh),
-        rawPtr(d.whd), rawPtr(d.kx), rawPtr(d.xm), rawPtr(d.divv), d.minDt, d.alphamin,
-        d.alphamax, d.decay_constant, rawPtr(d.alpha), nidxPool, traversalPool);
+        d.K, d.ngmax, box, grp.groupStart, grp.groupEnd, grp.numGroups, d.treeView, rawPtr(d.x), rawPtr(d.y),
+        rawPtr(d.z), rawPtr(d.vx), rawPtr(d.vy), rawPtr(d.vz), rawPtr(d.h), rawPtr(d.c), rawPtr(d.c11), rawPtr(d.c12),
+        rawPtr(d.c13), rawPtr(d.c22), rawPtr(d.c23), rawPtr(d.c33), rawPtr(d.wh), rawPtr(d.whd), rawPtr(d.kx),
+        rawPtr(d.xm), rawPtr(d.divv), d.minDt, d.alphamin, d.alphamax, d.decay_constant, rawPtr(d.alpha), nidxPool,
+        traversalPool);
     checkGpuErrors(cudaDeviceSynchronize());
 }
 

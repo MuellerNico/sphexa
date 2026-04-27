@@ -71,10 +71,7 @@ double calculateMachRMS(size_t first, size_t last, Dataset& d, MPI_Comm comm)
     {
         localMachRms = machSquareSumGpu(rawPtr(d.vx), rawPtr(d.vy), rawPtr(d.vz), rawPtr(d.c), first, last);
     }
-    else
-    {
-        localMachRms = localMachSquareSum(first, last, d);
-    }
+    else { localMachRms = localMachSquareSum(first, last, d); }
 
     int    rootRank = 0;
     double globalMachRms;

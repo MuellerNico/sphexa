@@ -103,10 +103,7 @@ void initSedovFields(Dataset& d, const std::map<std::string, double>& constants)
         std::for_each(u.begin(), u.end(), [cvm1 = 1.0 / cv](auto& t) { t *= cvm1; });
         d.temp = std::move(u);
     }
-    else
-    {
-        d.u = std::move(u);
-    }
+    else { d.u = std::move(u); }
 }
 
 template<class Dataset>
@@ -249,10 +246,7 @@ void initMagnetoFields(MagnetoData& md, HydroData& d, const std::map<std::string
     {
         T r = sqrt(d.x[i] * d.x[i] + d.y[i] * d.y[i] + d.z[i] * d.z[i]);
         if (r <= 0.125) { d.temp[i] = temp_in; }
-        else
-        {
-            d.temp[i] = temp_out;
-        }
+        else { d.temp[i] = temp_out; }
     }
 }
 

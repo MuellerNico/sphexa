@@ -148,11 +148,9 @@ void computeMomentumEnergyStdGpu(const GroupView& grp, Dataset& d, const cstone:
     cstone::resetTraversalCounters<<<1, 1>>>();
 
     cudaGradP<<<TravConfig::numBlocks(), TravConfig::numThreads>>>(
-        d.K, d.Kcour, d.ngmax, box, grp.groupStart, grp.groupEnd, grp.numGroups, d.treeView, rawPtr(d.x),
-        rawPtr(d.y), rawPtr(d.z), rawPtr(d.vx), rawPtr(d.vy), rawPtr(d.vz),
-        rawPtr(d.h), rawPtr(d.m), rawPtr(d.rho), rawPtr(d.p), rawPtr(d.c),
-        rawPtr(d.c11), rawPtr(d.c12), rawPtr(d.c13), rawPtr(d.c22),
-        rawPtr(d.c23), rawPtr(d.c33),
+        d.K, d.Kcour, d.ngmax, box, grp.groupStart, grp.groupEnd, grp.numGroups, d.treeView, rawPtr(d.x), rawPtr(d.y),
+        rawPtr(d.z), rawPtr(d.vx), rawPtr(d.vy), rawPtr(d.vz), rawPtr(d.h), rawPtr(d.m), rawPtr(d.rho), rawPtr(d.p),
+        rawPtr(d.c), rawPtr(d.c11), rawPtr(d.c12), rawPtr(d.c13), rawPtr(d.c22), rawPtr(d.c23), rawPtr(d.c33),
         rawPtr(d.wh), rawPtr(d.whd), rawPtr(d.ax), rawPtr(d.ay), rawPtr(d.az), rawPtr(d.du), nidxPool, traversalPool);
 
     {

@@ -120,10 +120,7 @@ void computeInductionAndDissipation(const GroupView& grp, SimulationData& sim, c
     {
         cuda::computeInductionAndDissipationGpu(grp, sim.hydro, sim.magneto, box);
     }
-    else
-    {
-        computeInductionAndDissipationImpl(grp.firstBody, grp.lastBody, sim, box);
-    }
+    else { computeInductionAndDissipationImpl(grp.firstBody, grp.lastBody, sim, box); }
 }
 
 } // namespace sph::magneto

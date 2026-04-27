@@ -68,7 +68,7 @@ auto localConservedQuantities(size_t startIndex, size_t endIndex, Dataset& d)
 #pragma omp declare reduction(+ : util::array<double, 3> : omp_out += omp_in) initializer(omp_priv(omp_orig))
 
     double eKin = 0.0;
-#pragma omp         parallel for reduction(+ : eKin, linmom, angmom)
+#pragma omp parallel for reduction(+ : eKin, linmom, angmom)
     for (size_t i = startIndex; i < endIndex; i++)
     {
         util::array<double, 3> X{x[i], y[i], z[i]};
@@ -84,7 +84,7 @@ auto localConservedQuantities(size_t startIndex, size_t endIndex, Dataset& d)
 
     if (!d.u.empty())
     {
-#pragma omp         parallel for reduction(+ : eInt)
+#pragma omp parallel for reduction(+ : eInt)
         for (size_t i = startIndex; i < endIndex; i++)
         {
             auto mi = m[i];

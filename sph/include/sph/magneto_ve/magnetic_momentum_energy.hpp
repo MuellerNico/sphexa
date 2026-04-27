@@ -127,10 +127,7 @@ void computeMomentumEnergy(const GroupView& grp, float* groupDt, SimData& sim, c
     {
         cuda::computeMagneticMomentumEnergy<avClean>(grp, groupDt, sim.hydro, sim.magneto, box);
     }
-    else
-    {
-        computeMagneticMomentumEnergyImpl<avClean>(grp.firstBody, grp.lastBody, sim, box);
-    }
+    else { computeMagneticMomentumEnergyImpl<avClean>(grp.firstBody, grp.lastBody, sim, box); }
 }
 
 } // namespace sph::magneto

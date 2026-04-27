@@ -130,13 +130,10 @@ void computeMomentumEnergy(const GroupView& grp, float* groupDt, Dataset& d,
 
     momentumEnergyGpu<avClean><<<TravConfig::numBlocks(), TravConfig::numThreads>>>(
         d.K, d.Kcour, d.Atmin, d.Atmax, d.ramp, d.ngmax, box, grp.groupStart, grp.groupEnd, grp.numGroups, d.treeView,
-        rawPtr(d.x), rawPtr(d.y), rawPtr(d.z), rawPtr(d.vx), rawPtr(d.vy),
-        rawPtr(d.vz), rawPtr(d.h), rawPtr(d.m), rawPtr(d.prho),
-        rawPtr(d.tdpdTrho), rawPtr(d.c), rawPtr(d.c11), rawPtr(d.c12),
-        rawPtr(d.c13), rawPtr(d.c22), rawPtr(d.c23), rawPtr(d.c33),
-        rawPtr(d.wh), rawPtr(d.kx), rawPtr(d.xm), rawPtr(d.alpha),
-        rawPtr(d.dV11), rawPtr(d.dV12), rawPtr(d.dV13), rawPtr(d.dV22),
-        rawPtr(d.dV23), rawPtr(d.dV33), rawPtr(d.ax), rawPtr(d.ay),
+        rawPtr(d.x), rawPtr(d.y), rawPtr(d.z), rawPtr(d.vx), rawPtr(d.vy), rawPtr(d.vz), rawPtr(d.h), rawPtr(d.m),
+        rawPtr(d.prho), rawPtr(d.tdpdTrho), rawPtr(d.c), rawPtr(d.c11), rawPtr(d.c12), rawPtr(d.c13), rawPtr(d.c22),
+        rawPtr(d.c23), rawPtr(d.c33), rawPtr(d.wh), rawPtr(d.kx), rawPtr(d.xm), rawPtr(d.alpha), rawPtr(d.dV11),
+        rawPtr(d.dV12), rawPtr(d.dV13), rawPtr(d.dV22), rawPtr(d.dV23), rawPtr(d.dV33), rawPtr(d.ax), rawPtr(d.ay),
         rawPtr(d.az), rawPtr(d.du), nidxPool, traversalPool, groupDt);
     checkGpuErrors(cudaGetLastError());
 

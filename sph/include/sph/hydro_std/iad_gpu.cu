@@ -117,11 +117,9 @@ void computeIADGpu(const GroupView& grp, Dataset& d, const cstone::Box<typename 
     cstone::resetTraversalCounters<<<1, 1>>>();
 
     IADGpuKernel<<<TravConfig::numBlocks(), TravConfig::numThreads>>>(
-        d.K, d.ngmax, box, grp.groupStart, grp.groupEnd, grp.numGroups, d.treeView, rawPtr(d.x),
-        rawPtr(d.y), rawPtr(d.z), rawPtr(d.h), rawPtr(d.m), rawPtr(d.rho),
-        rawPtr(d.wh), rawPtr(d.whd), rawPtr(d.c11), rawPtr(d.c12),
-        rawPtr(d.c13), rawPtr(d.c22), rawPtr(d.c23), rawPtr(d.c33), nidxPool,
-        traversalPool);
+        d.K, d.ngmax, box, grp.groupStart, grp.groupEnd, grp.numGroups, d.treeView, rawPtr(d.x), rawPtr(d.y),
+        rawPtr(d.z), rawPtr(d.h), rawPtr(d.m), rawPtr(d.rho), rawPtr(d.wh), rawPtr(d.whd), rawPtr(d.c11), rawPtr(d.c12),
+        rawPtr(d.c13), rawPtr(d.c22), rawPtr(d.c23), rawPtr(d.c33), nidxPool, traversalPool);
     checkGpuErrors(cudaDeviceSynchronize());
 }
 

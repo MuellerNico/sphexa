@@ -78,10 +78,10 @@ public:
     template<class Archive>
     void writeTimings(Archive* ar, const std::string& outFile)
     {
-        int numRanks           = ar->numRanks();
-        int lastIterationSaved = iteration - numStartCalled;
-        int numIterations      = numStartCalled;
-        int numSubSteps        = int(stepTimeNames.size());
+        int      numRanks             = ar->numRanks();
+        int      lastIterationSaved   = iteration - numStartCalled;
+        int      numIterations        = numStartCalled;
+        int      numSubSteps          = int(stepTimeNames.size());
         uint64_t lastIterationSaved64 = static_cast<uint64_t>(lastIterationSaved);
 
         ar->addStep(0, stepTimes.size(), outFile + ar->suffix());

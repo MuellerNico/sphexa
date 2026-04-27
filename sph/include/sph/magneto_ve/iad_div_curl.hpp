@@ -111,10 +111,7 @@ void computeIadFullDivvCurlv(const GroupView& grp, SimulationData& sim, const cs
     {
         cuda::computeIadFullDivvCurlv(grp, sim.hydro, sim.magneto, box);
     }
-    else
-    {
-        computeIadFullDivvCurlvImpl(grp.firstBody, grp.lastBody, sim, box);
-    }
+    else { computeIadFullDivvCurlvImpl(grp.firstBody, grp.lastBody, sim, box); }
 }
 
 } // namespace sph::magneto

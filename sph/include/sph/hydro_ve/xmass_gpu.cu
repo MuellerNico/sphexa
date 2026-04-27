@@ -107,9 +107,9 @@ void computeXMass(const GroupView& grp, Dataset& d, const cstone::Box<typename D
     cstone::resetTraversalCounters<<<1, 1>>>();
 
     xmassGpu<<<TravConfig::numBlocks(), TravConfig::numThreads>>>(
-        d.K, d.ng0, d.ngmax, box, grp.groupStart, grp.groupEnd, grp.numGroups, d.treeView, rawPtr(d.nc),
-        rawPtr(d.x), rawPtr(d.y), rawPtr(d.z), rawPtr(d.h), rawPtr(d.m),
-        rawPtr(d.wh), rawPtr(d.whd), rawPtr(d.xm), nidxPool, traversalPool);
+        d.K, d.ng0, d.ngmax, box, grp.groupStart, grp.groupEnd, grp.numGroups, d.treeView, rawPtr(d.nc), rawPtr(d.x),
+        rawPtr(d.y), rawPtr(d.z), rawPtr(d.h), rawPtr(d.m), rawPtr(d.wh), rawPtr(d.whd), rawPtr(d.xm), nidxPool,
+        traversalPool);
     checkGpuErrors(cudaDeviceSynchronize());
 
     NcStats::type stats[NcStats::numStats];

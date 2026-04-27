@@ -152,9 +152,9 @@ void createStirringModes(Dataset& d, T Lx, T Ly, T Lz, size_t st_maxmodes, T sti
                             d.modes[ndim * d.numModes + 2] = -kz;
                         }
                     } // in k range
-                }     // ikz
-            }         // iky
-        }             // ikx
+                } // ikz
+            } // iky
+        } // ikx
     }
 
     // TODO: should be a separate function
@@ -217,9 +217,9 @@ void createStirringModes(Dataset& d, T Lx, T Ly, T Lz, size_t st_maxmodes, T sti
                     d.modes[ndim * d.numModes + 1] = ky;
                     d.modes[ndim * d.numModes + 2] = kz;
                 } // in k range
-            }     // loop over angles
-        }         // loop over k
-    }             // st_spectform .eq. 2
+            } // loop over angles
+        } // loop over k
+    } // st_spectform .eq. 2
     d.numModes += 1;
 
     if (verbose) std::cout << "Total Number of Stirring Modes: " << d.numModes << std::endl;

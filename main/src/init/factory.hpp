@@ -50,10 +50,7 @@ std::unique_ptr<ISimInitializer<Dataset>> initializerFactory(std::string testCas
     if (testNamedBase == "sedov")
     {
         if (glassBlock.empty()) { return SimInitializers<Dataset>::makeSedovGrid(); }
-        else
-        {
-            return SimInitializers<Dataset>::makeSedovGlass(glassBlock, settingsFile, reader);
-        }
+        else { return SimInitializers<Dataset>::makeSedovGlass(glassBlock, settingsFile, reader); }
     }
     if (testNamedBase == "noh")
     {
@@ -83,18 +80,12 @@ std::unique_ptr<ISimInitializer<Dataset>> initializerFactory(std::string testCas
     if (testNamedBase == "turbulence")
     {
         if (glassBlock.empty()) { throw std::runtime_error("need a valid glass block for turbulence test\n"); }
-        else
-        {
-            return SimInitializers<Dataset>::makeTurbulence(glassBlock, settingsFile, reader);
-        }
+        else { return SimInitializers<Dataset>::makeTurbulence(glassBlock, settingsFile, reader); }
     }
     if (testNamedBase == "kelvin-helmholtz")
     {
         if (glassBlock.empty()) { throw std::runtime_error("need a valid glass block for Kelvin-Helmholtz test\n"); }
-        else
-        {
-            return SimInitializers<Dataset>::makeKelvinHelmholtz(glassBlock, settingsFile, reader);
-        }
+        else { return SimInitializers<Dataset>::makeKelvinHelmholtz(glassBlock, settingsFile, reader); }
     }
     if (testNamedBase == "evrard-cooling")
     {
@@ -104,10 +95,7 @@ std::unique_ptr<ISimInitializer<Dataset>> initializerFactory(std::string testCas
     if (testNamedBase == "polytrope")
     {
         if (glassBlock.empty()) { throw std::runtime_error("need a valid glass block to create polytrope\n"); }
-        else
-        {
-            return SimInitializers<Dataset>::makePolytrope(glassBlock, settingsFile, reader);
-        }
+        else { return SimInitializers<Dataset>::makePolytrope(glassBlock, settingsFile, reader); }
     }
     if (testCase.starts_with("tde-orbit"))
     {

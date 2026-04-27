@@ -215,20 +215,14 @@ public:
     void resizeAcc(size_t size)
     {
         if (cstone::HaveGpu<AccType>{}) { devData.resize(size, allocGrowthRate_); }
-        else
-        {
-            resize(size);
-        }
+        else { resize(size); }
     }
 
     //! @brief return the size of GPU arrays if in use, CPU arrays otherwise
     size_t accSize()
     {
         if (cstone::HaveGpu<AccType>{}) { return devData.size(); }
-        else
-        {
-            return size();
-        }
+        else { return size(); }
     }
 
     //! @brief particle fields selected for file output
@@ -258,10 +252,7 @@ public:
                     ar->stepAttribute(attribute, &tmp, attrSize);
                     *location = static_cast<EType>(tmp);
                 }
-                else
-                {
-                    ar->stepAttribute(attribute, location, attrSize);
-                }
+                else { ar->stepAttribute(attribute, location, attrSize); }
             }
             catch (std::out_of_range&)
             {
