@@ -50,7 +50,7 @@ using cstone::LocalIndex;
 using cstone::TravConfig;
 using cstone::TreeNodeIndex;
 
-template<class Tc, class T, class KeyType>
+template<class Tc, class Tm, class T, class KeyType>
 __global__ void
 fullIadDivvCurlvGpu(Tc K, unsigned ngmax, const cstone::Box<Tc> box, const LocalIndex* grpStart,
                     const LocalIndex* grpEnd, LocalIndex numGroups, const cstone::OctreeNsView<Tc, KeyType> tree,
@@ -82,7 +82,7 @@ fullIadDivvCurlvGpu(Tc K, unsigned ngmax, const cstone::Box<Tc> box, const Local
         if (i >= bodyEnd) continue;
 
         unsigned ncCapped = stl::min(ncTrue[0], ngmax);
-        IAD_gradhJLoop<TravConfig::targetSize>(i, K, box, neighborsWarp + laneIdx, ncCapped, x, y, z, h, wh, whd, xm, kx, c11,
+        IAD_gradhJLoop<TravConfig::targetSize>(i, K, box, neighborsWarp + laneIdx, ncCapped, x, y, z, h, m, wh, whd, xm, kx, c11,
                                          c12, c13, c22, c23, c33, gradh);
         full_divV_curlVJLoop<TravConfig::targetSize>(
             i, K, box, neighborsWarp + laneIdx, ncCapped, x, y, z, vx, vy, vz, h, c11, c12, c13, c22, c23, c33, wh, whd,

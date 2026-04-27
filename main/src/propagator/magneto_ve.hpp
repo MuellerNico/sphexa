@@ -157,30 +157,30 @@ public:
         domain.exchangeHalos(std::tie(get<"xm">(d)), get<"ax">(d), get<"keys">(d));
         timer.step("mpi::synchronizeHalos");
 
-        release(d, "ay");
         computeVe(groups_.view(), d, domain.box());
         timer.step("Normalization & Gradh");
+
+        domain.exchangeHalos(get<"vx", "vy", "vz", "kx">(d), get<"ax">(d), get<"keys">(d));
+        domain.exchangeHalos(get<"Bx", "By", "Bz">(md), get<"ax">(d), get<"keys">(d));
+        timer.step("mpi::synchronizeHalos");
+
+        release(d, "az", "ay");
+        acquire(d, "divv", "curlv");
+        sph::magneto::computeIadFullDivvCurlv(groups_.view(), simData, domain.box());
+        d.minDtRho = rhoTimestep(first, last, d);
+        timer.step("IadVelocityDivCurlGradh");
 
         computeEOS(first, last, d);
         timer.step("EquationOfState");
 
-        domain.exchangeHalos(get<"vx", "vy", "vz", "p", "c", "kx">(d), get<"ax">(d), get<"keys">(d));
-        domain.exchangeHalos(get<"Bx", "By", "Bz">(md), get<"ax">(d), get<"keys">(d));
-        timer.step("mpi::synchronizeHalos");
-
-        release(d, "az");
-        acquire(d, "divv", "curlv");
-        sph::magneto::computeIadFullDivvCurlv(groups_.view(), simData, domain.box());
-        d.minDtRho = rhoTimestep(first, last, d);
-        timer.step("IadVelocityDivCurl");
-
-        domain.exchangeHalos(get<"c11", "c12", "c13", "c22", "c23", "c33", "divv">(d), get<"ax">(d), get<"keys">(d));
+        domain.exchangeHalos(get<"c11", "c12", "c13", "c22", "c23", "c33", "divv", "c">(d), get<"ax">(d),
+                             get<"keys">(d));
         timer.step("mpi::synchronizeHalos");
 
         computeAVswitches(groups_.view(), d, domain.box());
         timer.step("AVswitches");
 
-        domain.exchangeHalos(get<"alpha", "gradh">(d), get<"ax">(d), get<"keys">(d));
+        domain.exchangeHalos(get<"alpha", "gradh", "p">(d), get<"ax">(d), get<"keys">(d));
         domain.exchangeHalos(get<"dvxdx", "dvxdy", " dvxdz", "dvydx", "dvydy", "dvydz", "dvzdx", "dvzdy", "dvzdz">(md),
                              get<"ax">(d), get<"keys">(d));
         timer.step("mpi::synchronizeHalos");
@@ -290,7 +290,7 @@ public:
         release(d, "prho", "c");
         acquire(d, "divv", "curlv");
         // partial recovery of cij in range [first:last] without halos, which are not needed for divv and curlv
-        if (!indicesDoneHydro.empty()) { computeIadDivvCurlv(groups_.view(), d, box); }
+        if (!indicesDoneHydro.empty()) { computeIadDivvCurlvGradh(groups_.view(), d, box); }
         output();
         release(d, "divv", "curlv");
         acquire(d, "prho", "c");
