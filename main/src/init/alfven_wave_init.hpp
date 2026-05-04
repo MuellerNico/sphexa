@@ -198,8 +198,11 @@ public:
         cstone::Box<T> globalBox(0, L, 0, L / 2., 0, L / 2., pbc, pbc, pbc);
 
         auto [keyStart, keyEnd] = equiDistantSfcSegments<KeyType>(rank, numRanks, 100);
-        assembleCuboid<T>(keyStart, keyEnd, globalBox, multiplicity, xBlock, yBlock, zBlock, d.x, d.y, d.z);
-
+        std::vector<T> x, y, z;
+        assembleCuboid<T>(keyStart, keyEnd, globalBox, multiplicity, xBlock, yBlock, zBlock, x, y, z);
+        d.x = x; // uploads to GPU if active
+        d.y = y;
+        d.z = z;
         d.resize(d.x.size());
         md.resize(d.x.size());
 
