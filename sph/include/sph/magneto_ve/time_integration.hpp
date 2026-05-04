@@ -81,11 +81,14 @@ void integrateMagneticQuantities(const GroupView grp, MagnetoData& md, float dt,
     {
         cuda::integrateMagneticQuantitiesGpu(grp, md, dt, dt_m1);
     }
-    integrateMagneticField(grp.firstBody, grp.lastBody, dt, dt_m1, md.Bx.data(), md.By.data(), md.Bz.data(),
-                           md.dBx.data(), md.dBy.data(), md.dBz.data(), md.dBx_m1.data(), md.dBy_m1.data(),
-                           md.dBz_m1.data());
-    integrateAuxiliaryQuantities(grp.firstBody, grp.lastBody, dt, dt_m1, md.psi_ch.data(), md.d_psi_ch.data(),
-                                 md.d_psi_ch_m1.data());
+    else 
+    {
+        integrateMagneticField(grp.firstBody, grp.lastBody, dt, dt_m1, md.Bx.data(), md.By.data(), md.Bz.data(),
+                            md.dBx.data(), md.dBy.data(), md.dBz.data(), md.dBx_m1.data(), md.dBy_m1.data(),
+                            md.dBz_m1.data());
+        integrateAuxiliaryQuantities(grp.firstBody, grp.lastBody, dt, dt_m1, md.psi_ch.data(), md.d_psi_ch.data(),
+                                    md.d_psi_ch_m1.data());
+    }
 }
 
 } // namespace sph::magneto
