@@ -187,7 +187,7 @@ void computeConservedQuantities(size_t startIndex, size_t endIndex, Dataset& sim
         std::tie(eKin, eInt, linmom, angmom) = localConservedQuantities(startIndex, endIndex, d);
         if (md.Bx.size() == d.x.size())
         {
-            std::tie(eMag, cumulativeDivBError, localMaxDivBError) = localMagneticEnergy(startIndex, endIndex, sim);
+            std::tie(eMag, cumulativeDivBError, localMaxDivBError) = localMagneticEnergy(startIndex, endIndex, simData);
         }
     }
     d.localNeighbors = ncsum;
@@ -212,7 +212,7 @@ void computeConservedQuantities(size_t startIndex, size_t endIndex, Dataset& sim
     MPI_Reduce(quantities.data(), globalQuantities.data(), quantities.size(), MpiType<double>{}, MPI_SUM, 0, comm);
 
     double globalMaxDivBErr = 0.0;
-    MPI_Reduce(&localMaxDivBError, &globalMaxDivBErr, 1, MpiType<double>{}, MPI_MAX, rootRank, comm);
+    MPI_Reduce(&localMaxDivBError, &globalMaxDivBErr, 1, MpiType<double>{}, MPI_MAX, 0, comm);
 
     d.ecin           = globalQuantities[0];
     d.eint           = globalQuantities[1];
