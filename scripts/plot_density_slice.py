@@ -57,6 +57,11 @@ def read_step(fname, step):
     return f, f[key]
 
 
+def get_nsteps(fname):
+    with h5py.File(fname, "r") as f:
+        return len([k for k in f.keys() if k.startswith("Step#")])
+
+
 def cubic_spline_2d(q):
     """Cubic spline SPH kernel in 2D, normalized. q = r/h."""
     sigma = 10.0 / (7.0 * np.pi)
@@ -128,7 +133,8 @@ _PLOT_AXES = {
 }
 
 
-def render_density_slice(fname, step, resolution=256, slice_axis='z', slice_pos=0.0):
+def render_density_slice(fname, step, resolution=256, slice_axis='z', slice_pos=0.0,
+                         title="Density", vmin=None, vmax=None, cmap='bone_r'):
     """Render a 2D slice of density using SPH kernel interpolation.
 
     slice_axis: which axis is normal to the slice plane ('x', 'y', or 'z')
@@ -184,13 +190,13 @@ def render_density_slice(fname, step, resolution=256, slice_axis='z', slice_pos=
     fig, ax = plt.subplots(figsize=(8, 7))
     ax.set_aspect('equal', adjustable='box')
 
-    im = ax.pcolormesh(xi, yi, di, cmap='bone_r', shading='auto')
+    im = ax.pcolormesh(xi, yi, di, cmap=cmap, shading='auto', vmin=vmin, vmax=vmax)
     cbar = fig.colorbar(im, ax=ax, shrink=0.8)
     cbar.set_label("rho")
 
     ax.set_xlabel(ha)
     ax.set_ylabel(va)
-    ax.set_title(f"Magnetic Sedov, Density, t=[{time_val}]  ({slice_axis}={slice_pos:+.4f})")
+    ax.set_title(f"{title}, t=[{time_val}]  ({slice_axis}={slice_pos:+.4f})")
     fig.text(0.78, 0.02, f"Resolution: {n_cbrt}^3", fontsize=10)
     plt.tight_layout()
 
@@ -198,9 +204,11 @@ def render_density_slice(fname, step, resolution=256, slice_axis='z', slice_pos=
     return fig, time_val
 
 
-def plot_density_slice(fname, step, slice_axis='z', slice_pos=0.0):
+def plot_density_slice(fname, step, slice_axis='z', slice_pos=0.0,
+                       title="Density", vmin=None, vmax=None, cmap='bone_r'):
     """Plot a single 2D slice and save as PNG."""
-    fig, _ = render_density_slice(fname, step, slice_axis=slice_axis, slice_pos=slice_pos)
+    fig, _ = render_density_slice(fname, step, slice_axis=slice_axis, slice_pos=slice_pos,
+                                  title=title, vmin=vmin, vmax=vmax, cmap=cmap)
     outdir = os.path.dirname(os.path.abspath(fname))
     outname = os.path.join(outdir, f"slice_rho_step{step}_{slice_axis}{slice_pos:+.4f}.png")
     fig.savefig(outname, dpi=150, bbox_inches='tight')
@@ -210,8 +218,9 @@ def plot_density_slice(fname, step, slice_axis='z', slice_pos=0.0):
 
 def _render_frame(args):
     """Worker function for parallel GIF generation. Returns (step, png_bytes)."""
-    fname, step, resolution, slice_axis, slice_pos = args
-    fig, _ = render_density_slice(fname, step, resolution, slice_axis=slice_axis, slice_pos=slice_pos)
+    fname, step, resolution, slice_axis, slice_pos, title, vmin, vmax, cmap = args
+    fig, _ = render_density_slice(fname, step, resolution, slice_axis=slice_axis, slice_pos=slice_pos,
+                                  title=title, vmin=vmin, vmax=vmax, cmap=cmap)
     import io
     buf = io.BytesIO()
     fig.savefig(buf, format='png', dpi=100, bbox_inches='tight')
@@ -221,7 +230,8 @@ def _render_frame(args):
     return step, png_bytes
 
 
-def make_gif(fname, start, end, n_workers=None, slice_axis='z', slice_pos=0.0):
+def make_gif(fname, start, end, n_workers=None, slice_axis='z', slice_pos=0.0,
+             title="Density", vmin=None, vmax=None, cmap='bone_r'):
     """Create an animated GIF from a range of steps.
 
     Limits to at most 100 frames by striding over the range.
@@ -246,7 +256,7 @@ def make_gif(fname, start, end, n_workers=None, slice_axis='z', slice_pos=0.0):
     n_total = len(steps)
     print(f"Generating {n_total} frames using {n_workers} workers...")
 
-    work = [(fname, step, 256, slice_axis, slice_pos) for step in steps]
+    work = [(fname, step, 256, slice_axis, slice_pos, title, vmin, vmax, cmap) for step in steps]
     results = {}
     with Pool(n_workers) as pool:
         for i, (step, png_bytes) in enumerate(pool.imap_unordered(_render_frame, work)):
@@ -279,27 +289,59 @@ if __name__ == "__main__":
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
             "Examples:\n"
-            "  %(prog)s data.h5 -p                    Print metadata\n"
+            "  %(prog)s data.h5                       PNG of the final step (default)\n"
+            "  %(prog)s data.h5 -i                    Print metadata\n"
             "  %(prog)s data.h5 5                     PNG, z=0 slice at step 5\n"
+            "  %(prog)s data.h5 --all                 PNG for every step in the file\n"
             "  %(prog)s data.h5 5 --axis x --pos 0.5  PNG, x=0.5 slice at step 5\n"
-            "  %(prog)s data.h5 0-20 --axis y          GIF, y=0 slices for steps 0-20\n"
+            "  %(prog)s data.h5 0-20 --axis y         GIF, y=0 slices for steps 0-20\n"
         ),
     )
     parser.add_argument("file", help="HDF5 input file")
-    parser.add_argument("step", nargs="?", help="Step number, range (e.g. 0-20), or omit for metadata")
+    parser.add_argument("step", nargs="?",
+                        help="Step number or range (e.g. 0-20). Omit to plot the final step.")
+    parser.add_argument("-i", "--info", action="store_true",
+                        help="Print HDF5 metadata and exit")
+    parser.add_argument("-a", "--all", action="store_true",
+                        help="Plot every step in the file as an individual PNG")
     parser.add_argument("--axis", choices=["x", "y", "z"], default="z",
                         help="Axis normal to the slice plane (default: z)")
     parser.add_argument("--pos", type=float, default=0.0,
                         help="Position along the slice axis (default: 0.0)")
+    parser.add_argument("--title", default="Density",
+                        help="Plot title prefix before the time/slice info (default: 'Density')")
+    parser.add_argument("--vmin", type=float, default=None,
+                        help="Lower density limit for the colormap (default: auto)")
+    parser.add_argument("--vmax", type=float, default=None,
+                        help="Upper density limit for the colormap (default: auto)")
+    parser.add_argument("--cmap", default="bone_r",
+                        help="Matplotlib colormap name (default: bone_r)")
 
     args = parser.parse_args()
 
-    if args.step is None or args.step == "-p":
+    if args.info:
         print_metadata(args.file)
         sys.exit(0)
 
-    if "-" in args.step and not args.step.startswith("-"):
+    common = dict(slice_axis=args.axis, slice_pos=args.pos,
+                  title=args.title, vmin=args.vmin, vmax=args.vmax, cmap=args.cmap)
+
+    if args.all:
+        nsteps = get_nsteps(args.file)
+        if nsteps == 0:
+            print(f"No steps found in {args.file}")
+            sys.exit(1)
+        print(f"Plotting all {nsteps} steps...")
+        for step in range(nsteps):
+            plot_density_slice(args.file, step, **common)
+    elif args.step is None:
+        nsteps = get_nsteps(args.file)
+        if nsteps == 0:
+            print(f"No steps found in {args.file}")
+            sys.exit(1)
+        plot_density_slice(args.file, nsteps - 1, **common)
+    elif "-" in args.step and not args.step.startswith("-"):
         start, end = args.step.split("-", 1)
-        make_gif(args.file, int(start), int(end), slice_axis=args.axis, slice_pos=args.pos)
+        make_gif(args.file, int(start), int(end), **common)
     else:
-        plot_density_slice(args.file, int(args.step), slice_axis=args.axis, slice_pos=args.pos)
+        plot_density_slice(args.file, int(args.step), **common)

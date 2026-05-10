@@ -19,9 +19,10 @@ COLUMNS = [
     "egrav",          # 6  d.egrav
     "linmom",         # 7  d.linmom
     "angmom",         # 8  d.angmom
-    "eMag",           # 9  d.eMag
+    "eMag",           # 9  md.eMag
     "meanDivBError",  # 10 md.meanDivBError
     "maxDivBError",   # 11 md.maxDivBError
+    "khgr",           # 12 KH growth rate (magnetic Kelvin-Helmholtz only)
 ]
 
 
@@ -29,7 +30,8 @@ def load(fname):
     data = np.loadtxt(fname)
     if data.ndim == 1:
         data = data[np.newaxis, :]
-    return {col: data[:, i] for i, col in enumerate(COLUMNS)}
+    ncols = data.shape[1]
+    return {col: data[:, i] for i, col in enumerate(COLUMNS[:ncols])}
 
 
 def plot_constants(fname, show=False):
@@ -37,7 +39,9 @@ def plot_constants(fname, show=False):
     it = d["iteration"]
     final_time = d["ttot"][-1]
 
-    fig, axes = plt.subplots(6, 1, figsize=(10, 19), sharex=True)
+    has_khgr = "khgr" in d
+    n_panels = 7 if has_khgr else 6
+    fig, axes = plt.subplots(n_panels, 1, figsize=(10, 19 + (3 if has_khgr else 0)), sharex=True)
     fig.subplots_adjust(hspace=0.08, top=0.93, bottom=0.05, left=0.12, right=0.97)
 
     fig.suptitle(
@@ -124,9 +128,18 @@ def plot_constants(fname, show=False):
     # --- Panel 6: Minimum timestep ---
     ax = axes[5]
     ax.set_ylabel("minDt")
-    ax.set_xlabel("Iteration")
+    if not has_khgr:
+        ax.set_xlabel("Iteration")
     ax.plot(it, d["minDt"], color="tab:green", linewidth=1.2)
     ax.grid(True, alpha=0.3)
+
+    # --- Panel 7: Kelvin-Helmholtz growth rate (only for magnetic KH runs) ---
+    if has_khgr:
+        ax = axes[6]
+        ax.set_ylabel("KH growth rate")
+        ax.set_xlabel("Iteration")
+        ax.plot(it, d["khgr"], color="tab:orange", linewidth=1.2)
+        ax.grid(True, alpha=0.3)
 
     outdir = os.path.dirname(os.path.abspath(fname))
     outname = os.path.join(outdir, "constants_diagnostics.pdf")
