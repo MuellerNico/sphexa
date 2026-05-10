@@ -231,23 +231,28 @@ public:
     [[nodiscard]] const InitSettings& constants() const override { return settings_; }
 };
 
-template<class MagnetoData>
-void initMagnetoData(MagnetoData& md)
+template<class HydroData, class MagnetoData>
+void initMagnetoData(MagnetoData& md, HydroData& d)
 {
-    std::fill(md.Bx.begin(), md.Bx.end(), -0.1);
-    std::fill(md.By.begin(), md.By.end(), 0.0);
-    std::fill(md.Bz.begin(), md.Bz.end(), 0.0);
+    constexpr bool gpu = cstone::HaveGpu<typename HydroData::AcceleratorType>{};
+    using T            = typename HydroData::RealType;
+    using HT           = typename HydroData::HydroType;
+    using XM           = typename HydroData::XM1Type;
 
-    std::fill(md.dBx.begin(), md.dBx.end(), 0.0);
-    std::fill(md.dBy.begin(), md.dBy.end(), 0.0);
-    std::fill(md.dBz.begin(), md.dBz.end(), 0.0);
-    std::fill(md.dBx_m1.begin(), md.dBx_m1.end(), 0.0);
-    std::fill(md.dBy_m1.begin(), md.dBy_m1.end(), 0.0);
-    std::fill(md.dBz_m1.begin(), md.dBz_m1.end(), 0.0);
+    cstone::fill<gpu>(md.Bx.begin(), md.Bx.end(), T(-0.1));
+    cstone::fill<gpu>(md.By.begin(), md.By.end(), T(0.0));
+    cstone::fill<gpu>(md.Bz.begin(), md.Bz.end(), T(0.0));
 
-    std::fill(md.psi_ch.begin(), md.psi_ch.end(), 0.0);
-    std::fill(md.d_psi_ch.begin(), md.d_psi_ch.end(), 0.0);
-    std::fill(md.d_psi_ch_m1.begin(), md.d_psi_ch_m1.end(), 0.0);
+    cstone::fill<gpu>(md.dBx.begin(), md.dBx.end(), T(0.0));
+    cstone::fill<gpu>(md.dBy.begin(), md.dBy.end(), T(0.0));
+    cstone::fill<gpu>(md.dBz.begin(), md.dBz.end(), T(0.0));
+    cstone::fill<gpu>(md.dBx_m1.begin(), md.dBx_m1.end(), XM(0.0));
+    cstone::fill<gpu>(md.dBy_m1.begin(), md.dBy_m1.end(), XM(0.0));
+    cstone::fill<gpu>(md.dBz_m1.begin(), md.dBz_m1.end(), XM(0.0));
+
+    cstone::fill<gpu>(md.psi_ch.begin(), md.psi_ch.end(), HT(0.0));
+    cstone::fill<gpu>(md.d_psi_ch.begin(), md.d_psi_ch.end(), HT(0.0));
+    cstone::fill<gpu>(md.d_psi_ch_m1.begin(), md.d_psi_ch_m1.end(), XM(0.0));
 }
 
 template<class SimulationData>
@@ -266,7 +271,7 @@ public:
 
         auto& md = simData.magneto;
         md.resize(simData.hydro.x.size());
-        initMagnetoData(md);
+        initMagnetoData(md, simData.hydro);
 
         settings_["numParticlesGlobal"] = double(simData.hydro.numParticlesGlobal);
         BuiltinWriter attributeSetter(settings_);

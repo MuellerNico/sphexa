@@ -124,7 +124,8 @@ public:
 
     void computeAndWrite(Dataset& simData, size_t firstIndex, size_t lastIndex, const cstone::Box<T>& box)
     {
-        auto& d = simData.hydro;
+        auto& d  = simData.hydro;
+        auto& md = simData.magneto;
         computeConservedQuantities(firstIndex, lastIndex, simData, simData.comm);
         double khgr = computeKHGrowthRate<T>(firstIndex, lastIndex, d, box, simData.comm);
 
@@ -133,8 +134,16 @@ public:
 
         if (rank == 0)
         {
-            fileutils::writeColumns(constantsFile, ' ', d.iteration, d.ttot, d.minDt, d.etot, d.ecin, d.eint, d.egrav,
-                                    d.linmom, d.angmom, khgr);
+            if (md.isAllocated("Bx"))
+            {
+                fileutils::writeColumns(constantsFile, ' ', d.iteration, d.ttot, d.minDt, d.etot, d.ecin, d.eint,
+                                        d.egrav, d.linmom, d.angmom, md.eMag, md.meanDivBError, md.maxDivBError, khgr);
+            }
+            else
+            {
+                fileutils::writeColumns(constantsFile, ' ', d.iteration, d.ttot, d.minDt, d.etot, d.ecin, d.eint,
+                                        d.egrav, d.linmom, d.angmom, khgr);
+            }
         }
     }
 };
