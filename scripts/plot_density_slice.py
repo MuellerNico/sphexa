@@ -152,6 +152,9 @@ def render_density_slice(fname, step, resolution=256, slice_axis='z', slice_pos=
     }
     rho = np.array(h5step["rho"])
 
+    have_alpha_B = "magneto::alpha_B" in h5step
+    alpha_B = np.array(h5step["magneto::alpha_B"]) if have_alpha_B else None
+
     time_val = h5step.attrs["time"][0]
     n_particles = len(coords['x'])
     n_cbrt = round(n_particles ** (1.0 / 3.0), 1)
@@ -160,6 +163,8 @@ def render_density_slice(fname, step, resolution=256, slice_axis='z', slice_pos=
     for ax, vals in coords.items():
         print(f"  {ax}: [{vals.min():.4f}, {vals.max():.4f}]")
     print(f"  rho: [{rho.min():.6f}, {rho.max():.6f}]")
+    if have_alpha_B:
+        print(f"  alpha_B: [{alpha_B.min():.6f}, {alpha_B.max():.6f}]")
 
     # Read or estimate smoothing lengths
     if "h" in h5step:
@@ -185,18 +190,32 @@ def render_density_slice(fname, step, resolution=256, slice_axis='z', slice_pos=
     # SPH kernel scatter onto grid
     print(f"  Interpolating onto {resolution}x{resolution} grid...")
     xi, yi, di = sph_scatter_to_grid(xs, ys, ds, hs, resolution)
+    if have_alpha_B:
+        _, _, ai = sph_scatter_to_grid(xs, ys, alpha_B[mask], hs, resolution)
 
     # Plot
-    fig, ax = plt.subplots(figsize=(8, 7))
-    ax.set_aspect('equal', adjustable='box')
+    if have_alpha_B:
+        fig, (ax_rho, ax_alpha) = plt.subplots(1, 2, figsize=(15, 7))
+    else:
+        fig, ax_rho = plt.subplots(figsize=(8, 7))
 
-    im = ax.pcolormesh(xi, yi, di, cmap=cmap, shading='auto', vmin=vmin, vmax=vmax)
-    cbar = fig.colorbar(im, ax=ax, shrink=0.8)
+    ax_rho.set_aspect('equal', adjustable='box')
+    im = ax_rho.pcolormesh(xi, yi, di, cmap=cmap, shading='auto', vmin=vmin, vmax=vmax)
+    cbar = fig.colorbar(im, ax=ax_rho, shrink=0.8)
     cbar.set_label("rho")
+    ax_rho.set_xlabel(ha)
+    ax_rho.set_ylabel(va)
+    ax_rho.set_title(f"{title}, t=[{time_val}]  ({slice_axis}={slice_pos:+.4f})")
 
-    ax.set_xlabel(ha)
-    ax.set_ylabel(va)
-    ax.set_title(f"{title}, t=[{time_val}]  ({slice_axis}={slice_pos:+.4f})")
+    if have_alpha_B:
+        ax_alpha.set_aspect('equal', adjustable='box')
+        im_a = ax_alpha.pcolormesh(xi, yi, ai, cmap='viridis', shading='auto')
+        cbar_a = fig.colorbar(im_a, ax=ax_alpha, shrink=0.8)
+        cbar_a.set_label("alpha_B")
+        ax_alpha.set_xlabel(ha)
+        ax_alpha.set_ylabel(va)
+        ax_alpha.set_title(f"alpha_B, t=[{time_val}]  ({slice_axis}={slice_pos:+.4f})")
+
     fig.text(0.78, 0.02, f"Resolution: {n_cbrt}^3", fontsize=10)
     plt.tight_layout()
 
