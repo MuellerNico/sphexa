@@ -88,6 +88,9 @@ void computeInductionAndDissipationImpl(size_t startIndex, size_t endIndex, SimD
     auto* dBz      = md.dBz.data();
     auto* d_psi_ch = md.d_psi_ch.data();
     auto* du       = d.du.data();
+    auto* alpha_B  = md.alpha_B.data();
+
+     // get mu_0 from simData, should maybe move it to MagnetoData
 
 #pragma omp parallel for
     for (size_t i = startIndex; i < endIndex; ++i)
@@ -102,7 +105,7 @@ void computeInductionAndDissipationImpl(size_t startIndex, size_t endIndex, SimD
 
         inductionAndDissipationJLoop(i, d.K, md.mu_0, box, neighbors + d.ngmax * ni, ncCapped, x, y, z, vx, vy, vz, c,
                                      Bx, By, Bz, h, c11, c12, c13, c22, c23, c33, wh, xm, kx, gradh, m, psi_ch, &dBx[i],
-                                     &dBy[i], &dBz[i], &du[i]);
+                                     &dBy[i], &dBz[i], &du[i], alpha_B);
 
         // get psi time differential with the recipe of Wissing et al (2020)
         auto rho_i     = kx[i] * m[i] / xm[i];

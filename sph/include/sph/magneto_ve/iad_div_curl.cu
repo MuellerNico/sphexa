@@ -96,7 +96,7 @@ divBCurlBGpu(Tc K, unsigned ngmax, const cstone::Box<Tc> box, const LocalIndex* 
              LocalIndex numGroups, const cstone::OctreeNsView<Tc, KeyType> tree, const Tc* x, const Tc* y, const Tc* z,
              const Tc* Bx, const Tc* By, const Tc* Bz, const T* h, const T* wh, const T* gradh, const T* xm,
              const T* kx, const T* c11, const T* c12, const T* c13, const T* c22, const T* c23, const T* c33, T* divB,
-             T* curlB_x, T* curlB_y, T* curlB_z, cstone::LocalIndex* nidx, TreeNodeIndex* globalPool)
+             T* curlB_x, T* curlB_y, T* curlB_z, T* gradB_norm, T* alpha_B, cstone::LocalIndex* nidx, TreeNodeIndex* globalPool)
 {
 
     unsigned laneIdx     = threadIdx.x & (GpuConfig::warpSize - 1);
@@ -124,7 +124,7 @@ divBCurlBGpu(Tc K, unsigned ngmax, const cstone::Box<Tc> box, const LocalIndex* 
         unsigned ncCapped = stl::min(ncTrue[0], ngmax);
         divB_curlB_JLoop<TravConfig::targetSize>(i, K, box, neighborsWarp + laneIdx, ncCapped, x, y, z, Bx, By, Bz, h,
                                                  c11, c12, c13, c22, c23, c33, wh, gradh, kx, xm, divB, curlB_x,
-                                                 curlB_y, curlB_z);
+                                                 curlB_y, curlB_z, gradB_norm, alpha_B);
     }
 }
 
@@ -155,7 +155,7 @@ void computeIadFullDivvCurlv(const GroupView& grp, HydroData& d, MagnetoData& m,
         rawPtr(d.h), rawPtr(d.wh), rawPtr(d.gradh), rawPtr(d.xm), rawPtr(d.kx),
         rawPtr(d.c11), rawPtr(d.c12), rawPtr(d.c13), rawPtr(d.c22),
         rawPtr(d.c23), rawPtr(d.c33), rawPtr(m.divB), rawPtr(m.curlB_x),
-        rawPtr(m.curlB_y), rawPtr(m.curlB_z), nidxPool, traversalPool);
+        rawPtr(m.curlB_y), rawPtr(m.curlB_z), rawPtr(m.gradB_norm), rawPtr(m.alpha_B), nidxPool, traversalPool);
 
     checkGpuErrors(cudaDeviceSynchronize());
 }

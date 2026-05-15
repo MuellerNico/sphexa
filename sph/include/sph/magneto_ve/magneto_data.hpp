@@ -70,9 +70,15 @@ public:
 
     // Parameters, should maybe move the induction/dissipation constants here
     RealType mu_0{1.0};
+    // HydroType alpha_B_max{1.0}; // not wired up yet
+    // HydroType alpha_B_min{0.0};
 
     // Observables
     RealType eMag{0.0}, meanDivBError{0.0}, maxDivBError{0.0};
+
+     /*! @brief
+     * Name of each field as string for use e.g in HDF5 output. Order has to correspond to what's returned by data().
+     */
 
     //!@brief particle fields used for magneto-hydrodynamics
     FieldVector<RealType> Bx, By, Bz;             // Magnetic field components
@@ -92,6 +98,10 @@ public:
     // Magnetic field spatial derivatives
     FieldVector<HydroType> divB;
     FieldVector<HydroType> curlB_x, curlB_y, curlB_z;
+    FieldVector<HydroType> gradB_norm; // 2-norm of the gradient matrix
+
+    // Artificial resistivity
+    FieldVector<HydroType> alpha_B;
 
     /* Is this a good idea?
      *
@@ -110,7 +120,7 @@ public:
     inline static constexpr std::array fieldNames{
         "Bx",     "By",       "Bz",          "dBx",   "dBy",     "dBz",     "dBx_m1", "dBy_m1", "dBz_m1",
         "psi_ch", "d_psi_ch", "d_psi_ch_m1", "dvxdx", "dvxdy",   " dvxdz",  "dvydx",  "dvydy",  "dvydz",
-        "dvzdx",  "dvzdy",    "dvzdz",       "divB",  "curlB_x", "curlB_y", "curlB_z"};
+        "dvzdx",  "dvzdy",    "dvzdz",       "divB",  "curlB_x", "curlB_y", "curlB_z", "gradB_norm", "alpha_B"};
 
     static const inline std::string prefix{"magneto::"};
 
@@ -121,7 +131,7 @@ public:
     auto dataTuple()
     {
         auto ret = std::tie(Bx, By, Bz, dBx, dBy, dBz, dBx_m1, dBy_m1, dBz_m1, psi_ch, d_psi_ch, d_psi_ch_m1, dvxdx,
-                            dvxdy, dvxdz, dvydx, dvydy, dvydz, dvzdx, dvzdy, dvzdz, divB, curlB_x, curlB_y, curlB_z);
+                            dvxdy, dvxdz, dvydx, dvydy, dvydz, dvzdx, dvzdy, dvzdz, divB, curlB_x, curlB_y, curlB_z, gradB_norm, alpha_B);
 
 #if defined(__clang__) || __GNUC__ > 11
         static_assert(std::tuple_size_v<decltype(ret)> == fieldNames.size());

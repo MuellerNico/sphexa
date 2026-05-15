@@ -48,10 +48,10 @@ inductionAndDissipationJLoop(cstone::LocalIndex i, Tc K, Tc mu_0, const cstone::
                              const Tc* z, const T* vx, const T* vy, const T* vz, const T* c, const Tc* Bx, const Tc* By,
                              const Tc* Bz, const T* h, const T* c11, const T* c12, const T* c13, const T* c22,
                              const T* c23, const T* c33, const T* wh, const T* xm, const T* kx, const T* gradh,
-                             const Tm* m, const T* psi_ch, Tc* dBxi, Tc* dByi, Tc* dBzi, Tc* dui)
+                             const Tm* m, const T* psi_ch, Tc* dBxi, Tc* dByi, Tc* dBzi, Tc* dui, const T* alpha_B)
 {
 
-    static constexpr T alpha_B = 1.0; // as in PHANTOM, SPHYNX uses 0.5
+    // static constexpr T alpha_B = 1.0; // as in PHANTOM, SPHYNX uses 0.5
 
     auto xi  = x[i];
     auto yi  = y[i];
@@ -82,6 +82,7 @@ inductionAndDissipationJLoop(cstone::LocalIndex i, Tc K, Tc mu_0, const cstone::
     auto Byi      = By[i];
     auto Bzi      = Bz[i];
     auto psi_ch_i = psi_ch[i];
+    auto alpha_Bi  = alpha_B[i];
 
     cstone::Vec3<Tc> dB_diss    = {0.0, 0.0, 0.0};
     cstone::Vec3<Tc> divB_clean = {0.0, 0.0, 0.0};
@@ -143,8 +144,9 @@ inductionAndDissipationJLoop(cstone::LocalIndex i, Tc K, Tc mu_0, const cstone::
 
         cstone::Vec3<T> vab_cross_rab{vy_ij * rz - vz_ij * ry, vz_ij * rx - vx_ij * rz, vx_ij * ry - vy_ij * rx};
         T               v_sigB = std::sqrt(norm2(vab_cross_rab) / r2);
+        T alpha_B_avg = T(0.5) * (alpha_Bi + alpha_B[j]);
 
-        T resistivity_ab = T(0.5) * alpha_B * v_sigB * dist;
+        T resistivity_ab = T(0.5) * alpha_B_avg * v_sigB * dist;
 
         cstone::Vec3<Tc> B_ab{Bxi - Bx[j], Byi - By[j], Bzi - Bz[j]};
 

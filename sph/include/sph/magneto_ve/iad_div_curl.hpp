@@ -87,6 +87,8 @@ void computeIadFullDivvCurlvImpl(size_t startIndex, size_t endIndex, SimulationD
     auto* curlB_x = md.curlB_x.data();
     auto* curlB_y = md.curlB_y.data();
     auto* curlB_z = md.curlB_z.data();
+    auto* gradB_norm = md.gradB_norm.data();
+    auto* alpha_B = md.alpha_B.data();
 
 #pragma omp parallel for
     for (size_t i = startIndex; i < endIndex; ++i)
@@ -102,7 +104,7 @@ void computeIadFullDivvCurlvImpl(size_t startIndex, size_t endIndex, SimulationD
                              dvydz, dvzdx, dvzdy, dvzdz);
 
         divB_curlB_JLoop(i, d.K, box, neighbors + d.ngmax * ni, ncCapped, x, y, z, Bx, By, Bz, h, c11, c12, c13, c22,
-                         c23, c33, wh, gradh, kx, xm, divB, curlB_x, curlB_y, curlB_z);
+                         c23, c33, wh, gradh, kx, xm, divB, curlB_x, curlB_y, curlB_z, gradB_norm, alpha_B);
     }
 }
 

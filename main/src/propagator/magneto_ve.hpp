@@ -78,7 +78,7 @@ protected:
     using DependentFieldsHydro = FieldList<"ax", "ay", "az", "prho", "c", "p", "du", "c11", "c12", "c13", "c22", "c23",
                                            "c33", "xm", "kx", "nc", "gradh">;
     using DependentFieldsMagneto = FieldList<"dvxdx", "dvxdy", " dvxdz", "dvydx", "dvydy", "dvydz", "dvzdx", "dvzdy",
-                                             "dvzdz", "divB", "curlB_x", "curlB_y", "curlB_z">;
+                                             "dvzdz", "divB", "curlB_x", "curlB_y", "curlB_z", "gradB_norm", "alpha_B">;
 
 public:
     MagnetoHydroProp(std::ostream& output, size_t rank)
@@ -188,7 +188,7 @@ public:
         sph::magneto::computeMomentumEnergy<avClean>(groups_.view(), nullptr, simData, domain.box());
         timer.step("MomentumAndEnergy");
 
-        domain.exchangeHalos(get<"divB", "curlB_x", "curlB_y", "curlB_z", "psi_ch">(md), get<"divv">(d),
+        domain.exchangeHalos(get<"divB", "curlB_x", "curlB_y", "curlB_z", "psi_ch", "alpha_B">(md), get<"divv">(d),
                              get<"curlv">(d));
         timer.step("mpi::synchronizeHalos");
 
