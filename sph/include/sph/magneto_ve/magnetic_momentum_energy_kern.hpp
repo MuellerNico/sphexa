@@ -187,7 +187,7 @@ HOST_DEVICE_FUN inline void magneticMomentumJLoop(
         T viscosity_ij = artificial_viscosity(alpha_i, alpha[j], magneticVsignali, magneticVsignalj, wij);
 
         // For time-step calculations
-        T vijsignal = magneticVsignali + magneticVsignalj - T(3) * wij;
+        T vijsignal = T(0.5) * (magneticVsignali + magneticVsignalj) - T(2) * wij;
         maxvsignali = (vijsignal > maxvsignali) ? vijsignal : maxvsignali;
 
         T a_mom, b_mom;
@@ -209,8 +209,8 @@ HOST_DEVICE_FUN inline void magneticMomentumJLoop(
             b_mom      = pow(xmassj, T(2) - sigma_ij) * pow(xmassi, sigma_ij);
         }
 
-        auto a_visc   = mj / (rhoi * gradhi) * viscosity_ij;
-        auto b_visc   = mj / (rhoj * gradh[j]) * viscosity_ij;
+        auto a_visc   = mj / rhoi * viscosity_ij;
+        auto b_visc   = mj / rhoj * viscosity_ij;
         T    a_visc_x = T(0.5) * (a_visc * termA1_i + b_visc * termA1_j);
         T    a_visc_y = T(0.5) * (a_visc * termA2_i + b_visc * termA2_j);
         T    a_visc_z = T(0.5) * (a_visc * termA3_i + b_visc * termA3_j);
