@@ -160,8 +160,8 @@ inductionAndDissipationJLoop(cstone::LocalIndex i, Tc K, Tc mu_0, const cstone::
                    ((rx * termA_avg[0] + ry * termA_avg[1] + rz * termA_avg[2]) / r2);
 
         // wave cleaning speed
-        auto v_alfven2_j = (Bxi * Bxi + Byi * Byi + Bzi * Bzi) / (mu_0 * rhoi);
-        auto c_hj        = fclean * std::sqrt(c[j] * c[j] + v_alfven2_j);
+        auto v_alfven2j  = (Bx[j] * Bx[j] + By[j] * By[j] + Bz[j] * Bz[j]) / (rhoj * mu_0);
+        auto c_hj        = fclean * std::sqrt(c[j] * c[j] + v_alfven2j);
 
         divB_clean += volj * (psi_ch_i * c_hi + psi_ch[j] * c_hj) * termA_avg;
     }
