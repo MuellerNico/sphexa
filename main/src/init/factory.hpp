@@ -126,6 +126,16 @@ std::unique_ptr<ISimInitializer<Dataset>> initializerFactory(std::string testCas
         if (glassBlock.empty()) { throw std::runtime_error("need a valid glass block for alfven-wave\n"); }
         return SimInitializers<Dataset>::makeAlfvenWave(glassBlock, settingsFile, reader);
     }
+    if (testNamedBase == "orszag-tang")
+    {
+        if (glassBlock.empty()) { throw std::runtime_error("need a valid glass block for orszag-tang\n"); }
+        return SimInitializers<Dataset>::makeOrszagTang(glassBlock, settingsFile, reader);
+    }
+    if (testNamedBase == "brio-wu")
+    {
+        if (glassBlock.empty()) { throw std::runtime_error("need a valid glass block for brio-wu\n"); }
+        return SimInitializers<Dataset>::makeBrioWu(glassBlock, settingsFile, reader);
+    }
     if (std::filesystem::exists(strBeforeSign(testCase, ":")))
     {
         return SimInitializers<Dataset>::makeFile(strBeforeSign(testCase, ":"), numberAfterSign(testCase, ":"), reader);

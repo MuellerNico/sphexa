@@ -41,6 +41,8 @@
 #include "turbulence_init.hpp"
 #include "wind_shock_init.hpp"
 #include "alfven_wave_init.hpp"
+#include "orszag_tang_init.hpp"
+#include "brio_wu_init.hpp"
 #ifdef SPH_EXA_HAVE_GRACKLE
 #include "evrard_cooling_init.hpp"
 #endif
@@ -196,6 +198,20 @@ std::unique_ptr<ISimInitializer<Dataset>>
 SimInitializers<Dataset>::makeAlfvenWave(std::string glassBlock, std::string settingsFile, IFileReader* reader)
 {
     return std::make_unique<AlfvenGlass<Dataset>>(glassBlock, settingsFile, reader);
+}
+
+template<class Dataset>
+std::unique_ptr<ISimInitializer<Dataset>>
+SimInitializers<Dataset>::makeOrszagTang(std::string glassBlock, std::string settingsFile, IFileReader* reader)
+{
+    return std::make_unique<OrszagTangGlass<Dataset>>(glassBlock, settingsFile, reader);
+}
+
+template<class Dataset>
+std::unique_ptr<ISimInitializer<Dataset>>
+SimInitializers<Dataset>::makeBrioWu(std::string glassBlock, std::string settingsFile, IFileReader* reader)
+{
+    return std::make_unique<BrioWuGlass<Dataset>>(glassBlock, settingsFile, reader);
 }
 
 #ifdef USE_CUDA
