@@ -83,6 +83,7 @@ int main(int argc, char** argv)
     const size_t             problemSize  = parser.get("-n", 50);
     const std::string        glassBlock   = parser.get("--glass");
     const std::string        propChoice   = parser.get("--prop", std::string("ve"));
+    const std::string        resistivity  = parser.get("--resistivity", std::string("switch"));
     const std::string        maxStepStr   = parser.get("-s", std::string("200"));
     std::vector<std::string> writeExtra   = parser.getCommaList("--wextra");
     std::vector<std::string> outputFields = parser.getCommaList("-f");
@@ -128,6 +129,27 @@ int main(int argc, char** argv)
     if (parser.exists("--G")) { d.g = parser.get<double>("--G"); }
     bool  haveGrav = (d.g != 0.0);
     float theta    = parser.get("--theta", haveGrav ? 0.5f : 1.0f);
+
+    if (propChoice == "magneto-ve")
+    {
+        using sph::magneto::ResistivityScheme;
+        if (resistivity == "switch") { md.resistivityScheme = ResistivityScheme::Switch; }
+        else if (resistivity == "SLR")
+        {
+            md.resistivityScheme = ResistivityScheme::SLR;
+            if (rank == 0) { std::cout << "WARNING: --resistivity SLR not implemented, falling back to switch\n"; }
+        }
+        else
+        {
+            try { md.alpha_B_const = std::stod(resistivity); }
+            catch (const std::exception&)
+            {
+                throw std::runtime_error("invalid --resistivity value '" + resistivity +
+                                         "': expected \"switch\", \"SLR\", or a number");
+            }
+            md.resistivityScheme = ResistivityScheme::Constant;
+        }
+    }
 
     if (!parser.exists("-o")) { outFile += fileWriter->suffix(); }
     if (writeEnabled) { writeSettings(simInit->constants(), outFile, fileWriter.get()); }
@@ -248,6 +270,10 @@ void printHelp(char* name, int rank)
         printf("\t--G NUM \t Gravitational constant [default dependent on test-case selection]\n\n");
 
         printf("\t--prop STRING \t Choice of SPH propagator [default: modern SPH]. For standard SPH, use \"std\" \n\n");
+
+        printf("\t--resistivity STRING \t Artificial resistivity for the magneto-ve propagator:\n"
+               "\t\t\t \"switch\" (Tricco & Price 2013), \"SLR\" (not yet implemented, falls back to switch),\n"
+               "\t\t\t or a number to set a constant alpha_B [default: switch]\n\n");
 
         printf("\t-s NUM \t\t int(NUM):  Number of iterations (time-steps) [200],\n\
                 \t real(NUM): Time of simulation (time-model)\n\n");
