@@ -45,6 +45,8 @@
 #include "cstone/util/reallocate.hpp"
 #include "sph/types.hpp"
 
+#include "resistivity.hpp"
+
 namespace sphexa::magneto
 {
 template<class AccType>
@@ -72,6 +74,10 @@ public:
     RealType mu_0{1.0};
     // HydroType alpha_B_max{1.0}; // not wired up yet
     // HydroType alpha_B_min{0.0};
+
+    // Artificial resistivity scheme, selected via --resistivity. alpha_B_const is used when scheme == Constant.
+    sph::magneto::ResistivityScheme resistivityScheme{sph::magneto::ResistivityScheme::Switch};
+    RealType                        alpha_B_const{1.0};
 
     // Observables
     RealType eMag{0.0}, meanDivBError{0.0}, maxDivBError{0.0};

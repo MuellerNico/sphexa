@@ -50,9 +50,6 @@ inductionAndDissipationJLoop(cstone::LocalIndex i, Tc K, Tc mu_0, const cstone::
                              const T* c23, const T* c33, const T* wh, const T* xm, const T* kx, const T* gradh,
                              const Tm* m, const T* psi_ch, Tc* dBxi, Tc* dByi, Tc* dBzi, Tc* dui, const T* alpha_B)
 {
-
-    // static constexpr T alpha_B = 1.0; // as in PHANTOM, SPHYNX uses 0.5
-
     auto xi  = x[i];
     auto yi  = y[i];
     auto zi  = z[i];

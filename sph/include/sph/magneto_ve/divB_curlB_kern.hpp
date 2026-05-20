@@ -35,6 +35,8 @@
 #include "sph/kernels.hpp"
 #include "sph/table_lookup.hpp"
 
+#include "resistivity.hpp"
+
 namespace sph::magneto
 {
 
@@ -44,10 +46,11 @@ HOST_DEVICE_FUN inline void divB_curlB_JLoop(cstone::LocalIndex i, Tc K, const c
                                              const Tc* y, const Tc* z, const Tc* Bx, const Tc* By, const Tc* Bz,
                                              const T* h, const T* c11, const T* c12, const T* c13, const T* c22,
                                              const T* c23, const T* c33, const T* wh, const T* gradh, const T* kx,
-                                             const T* xm, T* divB, T* curlB_x, T* curlB_y, T* curlB_z, T* gradB_norm, T* alpha_B)
+                                             const T* xm, T* divB, T* curlB_x, T* curlB_y, T* curlB_z, T* gradB_norm,
+                                             T* alpha_B, ResistivityScheme scheme, Tc alpha_B_const)
 {
     static constexpr T alpha_B_max = T(1.0); // temporary bounds for AR switch
-    static constexpr T alpha_B_min = T(0.0);
+    static constexpr T alpha_B_min = T(0.05);
 
     auto xi  = x[i];
     auto yi  = y[i];
@@ -112,11 +115,17 @@ HOST_DEVICE_FUN inline void divB_curlB_JLoop(cstone::LocalIndex i, Tc K, const c
     curlB_z[i] = norm_kxi * (dByi[0] - dBxi[1]);
 
     gradB_norm[i] = norm_kxi * std::sqrt(norm2(dBxi) + norm2(dByi) + norm2(dBzi));
-    T B_norm      = std::sqrt(Bxi * Bxi + Byi * Byi + Bzi * Bzi);
-    T eps         = T(1e-20);
-    T alpha_Bi    = hi * gradB_norm[i] / (B_norm + eps); // Tricco & Price 2013, eq. 16
-    if (alpha_Bi > alpha_B_max) alpha_Bi = alpha_B_max;
-    if (alpha_Bi < alpha_B_min) alpha_Bi = alpha_B_min;
-    alpha_B[i] = alpha_Bi;
+
+    if (scheme == ResistivityScheme::Constant) { alpha_B[i] = alpha_B_const; }
+    else
+    {
+        // Switch (Tricco & Price 2013, eq. 16); SLR falls back here until implemented
+        T B_norm   = std::sqrt(Bxi * Bxi + Byi * Byi + Bzi * Bzi);
+        T eps      = T(1e-20);
+        T alpha_Bi = hi * gradB_norm[i] / (B_norm + eps);
+        if (alpha_Bi > alpha_B_max) alpha_Bi = alpha_B_max;
+        if (alpha_Bi < alpha_B_min) alpha_Bi = alpha_B_min;
+        alpha_B[i] = alpha_Bi;
+    }
 }
 } // namespace sph::magneto
