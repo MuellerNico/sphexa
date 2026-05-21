@@ -171,3 +171,43 @@ def print_metadata(fname):
             for name in derived:
                 print(f"  {name:>20s}  ({_DERIVED[name][1]})")
         print()
+
+
+# ---------------------------------------------------------------------------
+# Domain resolution
+# ---------------------------------------------------------------------------
+
+def effective_resolution(extents, n_particles):
+    """Per-dimension particle count for a uniform-density glass tiling.
+
+    Mean spacing is constant across a glass-tiled domain, so each axis carries
+    extent/spacing particles and nx*ny*nz == n_particles by construction. This
+    is the cube root split by the box aspect ratio: it captures domain shape
+    (slab/box/cube) but smears over any density jump within the domain.
+    `extents` is (Lx, Ly, Lz). Returns (nx, ny, nz), or None for missing or
+    degenerate input.
+    """
+    if extents is None or not n_particles:
+        return None
+    lx, ly, lz = (float(e) for e in extents)
+    if min(lx, ly, lz) <= 0:
+        return None
+    spacing = (lx * ly * lz / n_particles) ** (1.0 / 3.0)
+    return lx / spacing, ly / spacing, lz / spacing
+
+
+def resolution_label(extents, n_particles):
+    """Compact resolution string for plot annotations and logs.
+
+    '~50.0^3' for (near-)cubic domains, '~896x448x18, ~100.0^3 total' for
+    slabs and boxes -- the trailing cube root is the per-side count users pass
+    to sphexa via -n.
+    """
+    n_cbrt = round(n_particles ** (1.0 / 3.0), 1) if n_particles else None
+    res = effective_resolution(extents, n_particles)
+    if res is None:
+        return f"~{n_cbrt}^3"
+    nx, ny, nz = res
+    if abs(nx - ny) < 0.5 and abs(ny - nz) < 0.5:
+        return f"~{n_cbrt}^3"
+    return f"~{nx:.0f}x{ny:.0f}x{nz:.0f}, ~{n_cbrt}^3 total"

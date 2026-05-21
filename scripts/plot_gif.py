@@ -84,9 +84,9 @@ def make_slice_gif(fname, start, end, field='rho', resolution=256,
               for g in ordered]
 
     outdir = os.path.dirname(os.path.abspath(fname))
-    safe = field.replace('::', '_')
+    short = field.split('::')[-1]
     outname = os.path.join(outdir,
-                           f"slice_{safe}_steps{start}-{end}_{slice_axis}{slice_pos:+.4f}.gif")
+                           f"slice_{short}_steps{start}-{end}_{slice_axis}{slice_pos:+.4f}.gif")
     _save_gif(frames, outname)
 
 

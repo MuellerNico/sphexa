@@ -11,7 +11,7 @@ import os
 import sys
 import argparse
 
-from _h5_common import print_metadata, get_nsteps, resolve_field
+from _h5_common import print_metadata, get_nsteps, resolve_field, resolution_label
 
 
 def cubic_spline_3d(q):
@@ -128,8 +128,9 @@ def compute_slice_grids(fname, step, field='rho', resolution=256,
             print(f"  h not in file, using estimate h={h_est:.6f}")
 
     n_particles = len(coords['x'])
-    n_cbrt = round(n_particles ** (1.0 / 3.0), 1)
-    print(f"Step {step}: time={time_val:.8f}, N={n_particles} (~{n_cbrt}^3)")
+    extents = [coords[ax].max() - coords[ax].min() for ax in ('x', 'y', 'z')]
+    res_label = resolution_label(extents, n_particles)
+    print(f"Step {step}: time={time_val:.8f}, N={n_particles} ({res_label})")
     for ax, vals in coords.items():
         print(f"  {ax}: [{vals.min():.4f}, {vals.max():.4f}]")
     print(f"  {field}: [{np.nanmin(values):.6f}, {np.nanmax(values):.6f}]")
@@ -147,7 +148,7 @@ def compute_slice_grids(fname, step, field='rho', resolution=256,
     print(f"  Interpolating onto {resolution}x{resolution} grid...")
     xi, yi, di = sph_scatter_to_grid(xs, ys, zoff, hs, values[mask], resolution)
 
-    return {'step': step, 'time': time_val, 'n_cbrt': n_cbrt,
+    return {'step': step, 'time': time_val, 'res_label': res_label,
             'field': field, 'label': label,
             'xi': xi, 'yi': yi, 'values': di}
 
@@ -169,7 +170,7 @@ def render_slice(grids, slice_axis='z', slice_pos=0.0, title=None,
     ax.set_ylabel(va)
     ax.set_title(f"{header}, t=[{time_val}]  ({slice_axis}={slice_pos:+.4f})")
 
-    fig.text(0.78, 0.02, f"Resolution: {grids['n_cbrt']}^3", fontsize=10)
+    fig.text(0.98, 0.02, f"Resolution: {grids['res_label']}", fontsize=10, ha='right')
     plt.tight_layout()
     return fig
 
@@ -185,10 +186,8 @@ def shared_ranges(grids, vmin=None, vmax=None):
 
 def _save_png(fig, fname, step, field, slice_axis, slice_pos):
     outdir = os.path.dirname(os.path.abspath(fname))
-    # field name may contain '::', which is fine in filenames but uglify;
-    # replace with '_' for clean output
-    safe = field.replace('::', '_')
-    outname = os.path.join(outdir, f"slice_{safe}_step{step}_{slice_axis}{slice_pos:+.4f}.png")
+    short = field.split('::')[-1]
+    outname = os.path.join(outdir, f"slice_{short}_step{step}_{slice_axis}{slice_pos:+.4f}.png")
     fig.savefig(outname, dpi=150, bbox_inches='tight')
     plt.close(fig)
     print(f"Saved: {outname}")

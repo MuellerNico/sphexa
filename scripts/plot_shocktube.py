@@ -17,7 +17,7 @@ import os
 import sys
 import argparse
 
-from _h5_common import print_metadata, get_nsteps, resolve_field
+from _h5_common import print_metadata, get_nsteps, resolve_field, resolution_label
 
 
 # Default panel layout: top row vx, vy, Bx, By; bottom row rho, u, P, log divBerr.
@@ -83,9 +83,10 @@ def compute_tube_fields(fname, step, y0=None, z0=None, thickness=None,
 
     mask = (np.abs(y - y0) < thickness) & (np.abs(z - z0) < thickness)
     n_in = int(mask.sum())
-    n_cbrt = round(n_particles ** (1.0 / 3.0), 1)
+    extents = [x.max() - x.min(), y.max() - y.min(), z.max() - z.min()]
+    res_label = resolution_label(extents, n_particles)
 
-    print(f"Step {step}: time={time_val:.8f}, N={n_particles} (~{n_cbrt}^3)")
+    print(f"Step {step}: time={time_val:.8f}, N={n_particles} ({res_label})")
     print(f"  tube center: (y={y0:.4f}, z={z0:.4f}), half-width: {thickness:.4f}")
     print(f"  particles in tube: {n_in} / {n_particles} ({100.0 * n_in / n_particles:.2f}%)")
     if n_in == 0:
@@ -95,7 +96,7 @@ def compute_tube_fields(fname, step, y0=None, z0=None, thickness=None,
     return {
         'step':    step,
         'time':    time_val,
-        'n_cbrt':  n_cbrt,
+        'res_label': res_label,
         'n_tube':  n_in,
         'x':       x[mask],
         'panels':  tuple(panels),
@@ -131,7 +132,7 @@ def render_shocktube(grids, title="Brio-Wu", limits=None, xlim=None,
         flat[j].axis('off')
 
     fig.suptitle(f"{title}, t={grids['time']:.4f}  (tube N={grids['n_tube']})")
-    fig.text(0.78, 0.005, f"Resolution: {grids['n_cbrt']}^3", fontsize=10)
+    fig.text(0.98, 0.005, f"Resolution: {grids['res_label']}", fontsize=10, ha='right')
     plt.tight_layout(rect=[0, 0.02, 1, 0.97])
     return fig
 

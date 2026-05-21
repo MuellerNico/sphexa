@@ -10,6 +10,8 @@ from pathlib import Path
 import h5py
 import numpy as np
 
+from _h5_common import resolution_label
+
 
 def format_runtime(seconds: float) -> str:
     s = int(round(seconds))
@@ -51,7 +53,8 @@ def parse_start(info_log: Path):
 
 
 def collect_dump(h5file: Path):
-    info = {"rows": [], "n_particles": None, "fields": [], "attrs": {}, "box": None}
+    info = {"rows": [], "n_particles": None, "fields": [], "attrs": {},
+            "box": None}
     with h5py.File(h5file, "r") as f:
         step_keys = sorted(
             (k for k in f.keys() if k.startswith("Step#")),
@@ -127,7 +130,10 @@ def main():
     rows = info["rows"]
     n_particles = info["n_particles"]
     final_time = rows[-1][2] if rows else None
-    n_cbrt = round(n_particles ** (1.0 / 3.0), 1) if n_particles else None
+
+    extents = None
+    if info["box"] is not None:
+        extents = [hi - lo for lo, hi in (info["box"][ax] for ax in ("x", "y", "z"))]
 
     dump_size = dump.stat().st_size
     profile = dump.with_name("profile.h5")
@@ -142,7 +148,7 @@ def main():
         f.write(f"hostname: {socket.gethostname()}\n")
         f.write(f"gpu: {detect_gpu()}\n")
         if n_particles is not None:
-            f.write(f"particles: {n_particles} (~{n_cbrt}^3)\n")
+            f.write(f"particles: {n_particles} ({resolution_label(extents, n_particles)})\n")
         if final_time is not None:
             f.write(f"final time: {final_time:.8f}\n")
         f.write(f"writes: {len(rows)}\n")
