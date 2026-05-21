@@ -141,6 +141,11 @@ std::unique_ptr<ISimInitializer<Dataset>> initializerFactory(std::string testCas
         if (glassBlock.empty()) { throw std::runtime_error("need a valid glass block for mhd-loop\n"); }
         return SimInitializers<Dataset>::makeMhdLoop(glassBlock, settingsFile, reader);
     }
+    if (testNamedBase == "mhd-rotor")
+    {
+        if (glassBlock.empty()) { throw std::runtime_error("need a valid glass block for mhd-rotor\n"); }
+        return SimInitializers<Dataset>::makeMhdRotor(glassBlock, settingsFile, reader);
+    }
     if (std::filesystem::exists(strBeforeSign(testCase, ":")))
     {
         return SimInitializers<Dataset>::makeFile(strBeforeSign(testCase, ":"), numberAfterSign(testCase, ":"), reader);

@@ -44,6 +44,7 @@
 #include "orszag_tang_init.hpp"
 #include "brio_wu_init.hpp"
 #include "mhd_loop_init.hpp"
+#include "mhd_rotor_init.hpp"
 #ifdef SPH_EXA_HAVE_GRACKLE
 #include "evrard_cooling_init.hpp"
 #endif
@@ -220,6 +221,13 @@ std::unique_ptr<ISimInitializer<Dataset>>
 SimInitializers<Dataset>::makeMhdLoop(std::string glassBlock, std::string settingsFile, IFileReader* reader)
 {
     return std::make_unique<MhdLoopGlass<Dataset>>(glassBlock, settingsFile, reader);
+}
+
+template<class Dataset>
+std::unique_ptr<ISimInitializer<Dataset>>
+SimInitializers<Dataset>::makeMhdRotor(std::string glassBlock, std::string settingsFile, IFileReader* reader)
+{
+    return std::make_unique<MhdRotorGlass<Dataset>>(glassBlock, settingsFile, reader);
 }
 
 #ifdef USE_CUDA

@@ -79,6 +79,15 @@ def _Emag(s):
                   _arr(s, 'magneto::Bz')**2)
 
 
+@_derive('Pmag', r'$P_\mathrm{mag}$',
+         ['magneto::Bx', 'magneto::By', 'magneto::Bz'])
+def _Pmag(s):
+    # magnetic pressure B^2/(2*mu_0); equals Emag for the default mu_0 = 1.
+    # mu_0 is a step attribute, not a dataset -- fall back to 1.0 if absent.
+    mu0 = float(np.atleast_1d(s.attrs.get('mu_0', 1.0))[0])
+    return _Emag(s) / mu0
+
+
 @_derive('KE', 'kinetic energy density',
          ['rho', 'vx', 'vy', 'vz'])
 def _KE(s):
