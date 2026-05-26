@@ -44,11 +44,11 @@ template<bool avClean, size_t stride = 1, class Tc, class Tm, class T, class Tm1
 HOST_DEVICE_FUN inline void magneticMomentumJLoop(
     cstone::LocalIndex i, Tc K, const Tc mu_0, const cstone::Box<Tc>& box, const cstone::LocalIndex* neighbors,
     unsigned neighborsCount, const Tc* x, const Tc* y, const Tc* z, const T* vx, const T* vy, const T* vz, const T* h,
-    const Tm* m, const T* p, const T* tdpdTrho, const T* c, const T* c11, const T* c12, const T* c13, const T* c22,
-    const T* c23, const T* c33, const T Atmin, const T Atmax, const T ramp, const T* wh, const T* kx, const T* xm,
-    const T* alpha, const T* dvxdx, const T* dvxdy, const T* dvxdz, const T* dvydx, const T* dvydy, const T* dvydz,
-    const T* dvzdx, const T* dvzdy, const T* dvzdz, const Tc* Bx, const Tc* By, const Tc* Bz, const T* gradh,
-    T* grad_P_x, T* grad_P_y, T* grad_P_z, Tm1* du, T* maxvsignal)
+    const Tm* m, const T* p, const T* tdpdTrho, const T* c, const Tc* u, const T* c11, const T* c12, const T* c13,
+    const T* c22, const T* c23, const T* c33, const T Atmin, const T Atmax, const T ramp, const T* wh, const T* kx,
+    const T* xm, const T* alpha, const T* dvxdx, const T* dvxdy, const T* dvxdz, const T* dvydx, const T* dvydy,
+    const T* dvydz, const T* dvzdx, const T* dvzdy, const T* dvzdz, const Tc* Bx, const Tc* By, const Tc* Bz,
+    const T* gradh, T* grad_P_x, T* grad_P_y, T* grad_P_z, Tm1* du, T* maxvsignal)
 {
 
     T    mu_0Inv = 1 / mu_0;
@@ -74,6 +74,7 @@ HOST_DEVICE_FUN inline void magneticMomentumJLoop(
     auto hi     = h[i];
     auto mi     = m[i];
     auto ci     = c[i];
+    auto ui     = u[i];
     auto kxi    = kx[i];
     auto gradhi = gradh[i];
 
@@ -81,6 +82,8 @@ HOST_DEVICE_FUN inline void magneticMomentumJLoop(
 
     auto xmassi = xm[i];
     auto rhoi   = kxi * mi / xmassi;
+    auto proi   = pi / (kxi * mi * mi * gradhi);
+    auto voli   = xmassi / kxi;
 
     T hiInv  = T(1) / hi;
     T hiInv3 = hiInv * hiInv * hiInv;
@@ -88,6 +91,7 @@ HOST_DEVICE_FUN inline void magneticMomentumJLoop(
     T maxvsignali = 0.0;
     T momentum_x = 0.0, momentum_y = 0.0, momentum_z = 0.0, energy = 0.0;
     T a_visc_energy = 0.0;
+    T a_heat_cond  = 0.0;
 
     auto c11i = c11[i];
     auto c12i = c12[i];
@@ -137,6 +141,10 @@ HOST_DEVICE_FUN inline void magneticMomentumJLoop(
         T r2   = rx * rx + ry * ry + rz * rz;
         T dist = std::sqrt(r2);
 
+        T ux_ij = rx / dist;
+        T uy_ij = ry / dist;
+        T uz_ij = rz / dist;
+
         T vx_ij = vxi - vxj;
         T vy_ij = vyi - vyj;
         T vz_ij = vzi - vzj;
@@ -168,9 +176,12 @@ HOST_DEVICE_FUN inline void magneticMomentumJLoop(
 
         auto mj     = m[j];
         auto cj     = c[j];
+        auto uj     = u[j];
         auto kxj    = kx[j];
         auto xmassj = xm[j];
         auto rhoj   = kxj * mj / xmassj;
+        auto proj   = p[j] / (kxj * mj * mj * gradh[j]);
+        auto volj   = xmassj / kxj;
 
         T rv = rx * vx_ij + ry * vy_ij + rz * vz_ij;
         if constexpr (avClean)
@@ -183,8 +194,10 @@ HOST_DEVICE_FUN inline void magneticMomentumJLoop(
         T v_alfven2j       = (Bx[j] * Bx[j] + By[j] * By[j] + Bz[j] * Bz[j]) / (rhoj * mu_0);
         T magneticVsignalj = std::sqrt(cj * cj + v_alfven2j);
 
-        T wij          = rv / dist;
-        T viscosity_ij = artificial_viscosity(alpha_i, alpha[j], magneticVsignali, magneticVsignalj, wij);
+        T wij             = rv / dist;
+        T delta_u         = ui - uj;
+        T viscosity_ij    = artificial_viscosity(alpha_i, alpha[j], magneticVsignali, magneticVsignalj, wij);
+        T heat_conduction = AV_heat_conduction(wij, rhoi, rhoj, proi, proj, delta_u);
 
         // For time-step calculations
         T vijsignal = T(0.5) * (magneticVsignali + magneticVsignalj) - T(2) * wij;
@@ -215,6 +228,13 @@ HOST_DEVICE_FUN inline void magneticMomentumJLoop(
         T    a_visc_y = T(0.5) * (a_visc * termA2_i + b_visc * termA2_j);
         T    a_visc_z = T(0.5) * (a_visc * termA3_i + b_visc * termA3_j);
         a_visc_energy += a_visc_x * vx_ij + a_visc_y * vy_ij + a_visc_z * vz_ij;
+
+        T a_heat   = voli * mj / mi * heat_conduction;
+        T b_heat   = volj * heat_conduction;
+        T a_heat_x = T(0.5) * (a_heat * termA1_i + b_heat * termA1_j);
+        T a_heat_y = T(0.5) * (a_heat * termA2_i + b_heat * termA2_j);
+        T a_heat_z = T(0.5) * (a_heat * termA3_i + b_heat * termA3_j);
+        a_heat_cond += a_heat_x * ux_ij + a_heat_y * uy_ij + a_heat_z * uz_ij;
 
         energy += mj * a_mom * (vx_ij * termA1_i + vy_ij * termA2_i + vz_ij * termA3_i);
 
@@ -259,7 +279,7 @@ HOST_DEVICE_FUN inline void magneticMomentumJLoop(
 
     a_visc_energy = stl::max(T(0), a_visc_energy);
     Tc eCoeff     = (tdpdTrho == nullptr) ? pi / (kxi * mi * mi * gradhi) : tdpdTrho[i];
-    du[i]         = K * (eCoeff * energy + T(0.5) * a_visc_energy); // factor of 2 already removed from 2P/rho
+    du[i]         = K * (eCoeff * energy + T(0.5) * a_visc_energy + a_heat_cond); // factor of 2 already removed from 2P/rho
 
     // grad_P_xyz is stored as the acceleration,s accel = -grad_P / rho
     grad_P_x[i] = K * (momentum_x - Bxi * f_i * H * mu_0Inv);

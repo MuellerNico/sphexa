@@ -55,6 +55,7 @@ void computeMagneticMomentumEnergyImpl(size_t startIndex, size_t endIndex, SimDa
     const auto* vy       = d.vy.data();
     const auto* vz       = d.vz.data();
     const auto* c        = d.c.data();
+    const auto* u        = d.u.data();
     const auto* p        = d.p.data();
     const auto* tdpdTrho = d.tdpdTrho.data();
     const auto* alpha    = d.alpha.data();
@@ -102,7 +103,7 @@ void computeMagneticMomentumEnergyImpl(size_t startIndex, size_t endIndex, SimDa
         T maxvsignal = 0;
 
         magneticMomentumJLoop<avClean>(i, d.K, md.mu_0, box, neighbors + d.ngmax * ni, ncCapped, x, y, z, vx, vy, vz, h,
-                                       m, p, tdpdTrho, c, c11, c12, c13, c22, c23, c33, d.Atmin, d.Atmax, d.ramp, wh,
+                                       m, p, tdpdTrho, c, u, c11, c12, c13, c22, c23, c33, d.Atmin, d.Atmax, d.ramp, wh,
                                        kx, xm, alpha, dvxdx, dvxdy, dvxdz, dvydx, dvydy, dvydz, dvzdx, dvzdy, dvzdz, Bx,
                                        By, Bz, gradh, grad_P_x, grad_P_y, grad_P_z, du, &maxvsignal);
 

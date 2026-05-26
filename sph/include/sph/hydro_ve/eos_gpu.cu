@@ -43,7 +43,7 @@ namespace gpu
 
 template<class Tt, class Tm, class Thydro>
 __global__ void cudaComputeIdealGasEOS(size_t firstParticle, size_t lastParticle, Tm mui, Tt gamma, const Tt* temp,
-                                       const Tt* u, const Tm* m, const Thydro* kx, const Thydro* xm,
+                                       Tt* u, const Tm* m, const Thydro* kx, const Thydro* xm,
                                        const Thydro* gradh, Thydro* prho, Thydro* c, Thydro* rho, Thydro* p)
 {
     unsigned i = firstParticle + blockDim.x * blockIdx.x + threadIdx.x;
@@ -52,7 +52,11 @@ __global__ void cudaComputeIdealGasEOS(size_t firstParticle, size_t lastParticle
     Thydro p_i;
     Thydro rho_i = kx[i] * m[i] / xm[i];
 
-    if (u == nullptr) { util::tie(p_i, c[i]) = idealGasEOS(temp[i], rho_i, mui, gamma); }
+    if (temp != nullptr)
+    {
+        util::tie(p_i, c[i]) = idealGasEOS(temp[i], rho_i, mui, gamma);
+        if (u != nullptr) { u[i] = idealGasCv(mui, gamma) * temp[i]; }
+    }
     else { util::tie(p_i, c[i]) = idealGasEOS_u(u[i], rho_i, gamma); }
 
     prho[i] = p_i / (kx[i] * m[i] * m[i] * gradh[i]);
@@ -61,7 +65,7 @@ __global__ void cudaComputeIdealGasEOS(size_t firstParticle, size_t lastParticle
 }
 
 template<class Tt, class Tm, class Thydro>
-void computeIdealGasEOS(size_t firstParticle, size_t lastParticle, Tm mui, Tt gamma, const Tt* temp, const Tt* u,
+void computeIdealGasEOS(size_t firstParticle, size_t lastParticle, Tm mui, Tt gamma, const Tt* temp, Tt* u,
                         const Tm* m, const Thydro* kx, const Thydro* xm, const Thydro* gradh, Thydro* prho, Thydro* c,
                         Thydro* rho, Thydro* p)
 {
@@ -76,7 +80,7 @@ void computeIdealGasEOS(size_t firstParticle, size_t lastParticle, Tm mui, Tt ga
 
 #define COMPUTE_EOS(Ttemp, Tm, Thydro)                                                                                 \
     template void computeIdealGasEOS(size_t firstParticle, size_t lastParticle, Tm mui, Ttemp gamma,                   \
-                                     const Ttemp* temp, const Ttemp* u, const Tm* m, const Thydro* kx,                 \
+                                     const Ttemp* temp, Ttemp* u, const Tm* m, const Thydro* kx,                       \
                                      const Thydro* xm, const Thydro* gradh, Thydro* prho, Thydro* c, Thydro* rho,      \
                                      Thydro* p)
 

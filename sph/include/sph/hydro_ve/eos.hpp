@@ -64,9 +64,11 @@ void computeIdealGasEOS_Impl(size_t startIndex, size_t endIndex, Dataset& d)
 
     bool storeRho = (d.rho.size() == d.m.size());
     bool storeP   = (d.p.size() == d.m.size());
+    bool storeU   = (d.u.size() == d.m.size());
 
-    if (d.u.empty())
+    if (!d.temp.empty())
     {
+        auto cv = idealGasCv(d.muiConst, d.gamma);
 #pragma omp parallel for schedule(static)
         for (size_t i = startIndex; i < endIndex; ++i)
         {
@@ -74,6 +76,7 @@ void computeIdealGasEOS_Impl(size_t startIndex, size_t endIndex, Dataset& d)
             auto [pi, ci] = idealGasEOS(temp[i], rho, d.muiConst, d.gamma);
             prho[i]       = pi / (kx[i] * m[i] * m[i] * gradh[i]);
             c[i]          = ci;
+            if (storeU) { d.u[i] = cv * temp[i]; }
             if (storeRho) { d.rho[i] = rho; }
             if (storeP) { d.p[i] = pi; }
         }
