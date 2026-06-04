@@ -54,7 +54,8 @@ template<bool avClean, class Tc, class Tm, class T, class Tm1, class KeyType>
 __global__ void
 magneticMomentumGpu(Tc K, Tc Kcour, T Atmin, T Atmax, T ramp, unsigned ngmax, const cstone::Box<Tc> box,
                     const LocalIndex* grpStart, const LocalIndex* grpEnd, LocalIndex numGroups,
-                    const cstone::OctreeNsView<Tc, KeyType> tree, const Tc mu_0, const Tc* x, const Tc* y, const Tc* z,
+                    const cstone::OctreeNsView<Tc, KeyType> tree, const Tc mu_0, const Tc alpha_u,
+                    const Tc* x, const Tc* y, const Tc* z,
                     const T* vx, const T* vy, const T* vz, const T* h, const Tm* m, const T* p, const T* tdpdTrho,
                     const T* c, const Tc* u, const T* c11, const T* c12, const T* c13, const T* c22, const T* c23,
                     const T* c33, const T* wh, const T* kx, const T* xm, const T* alpha, const T* dvxdx, const T* dvxdy,
@@ -89,9 +90,9 @@ magneticMomentumGpu(Tc K, Tc Kcour, T Atmin, T Atmax, T ramp, unsigned ngmax, co
         if (i < bodyEnd)
         {
             magneticMomentumJLoop<avClean, TravConfig::targetSize>(
-                i, K, mu_0, box, neighborsWarp + laneIdx, ncCapped, x, y, z, vx, vy, vz, h, m, p, tdpdTrho, c, u, c11,
-                c12, c13, c22, c23, c33, Atmin, Atmax, ramp, wh, kx, xm, alpha, dvxdx, dvxdy, dvxdz, dvydx, dvydy,
-                dvydz, dvzdx, dvzdy, dvzdz, Bx, By, Bz, gradh, grad_P_x, grad_P_y, grad_P_z, du, &maxvsignal);
+                i, K, mu_0, alpha_u, box, neighborsWarp + laneIdx, ncCapped, x, y, z, vx, vy, vz, h, m, p, tdpdTrho, c,
+                u, c11, c12, c13, c22, c23, c33, Atmin, Atmax, ramp, wh, kx, xm, alpha, dvxdx, dvxdy, dvxdz, dvydx,
+                dvydy, dvydz, dvzdx, dvzdy, dvzdz, Bx, By, Bz, gradh, grad_P_x, grad_P_y, grad_P_z, du, &maxvsignal);
         }
 
         // auto dt_lane = (i < bodyEnd) ? tsKCourant(maxvsignal, h[i], c[i], Kcour) : INFINITY;
@@ -141,7 +142,7 @@ void computeMagneticMomentumEnergy(const GroupView& grp, float* groupDt, HydroDa
 
     magneticMomentumGpu<avClean><<<TravConfig::numBlocks(), TravConfig::numThreads>>>(
         d.K, d.Kcour, d.Atmin, d.Atmax, d.ramp, d.ngmax, box, grp.groupStart, grp.groupEnd, grp.numGroups, d.treeView,
-        m.mu_0, rawPtr(d.x), rawPtr(d.y), rawPtr(d.z), rawPtr(d.vx),
+        m.mu_0, m.alpha_u, rawPtr(d.x), rawPtr(d.y), rawPtr(d.z), rawPtr(d.vx),
         rawPtr(d.vy), rawPtr(d.vz), rawPtr(d.h), rawPtr(d.m), rawPtr(d.p),
         rawPtr(d.tdpdTrho), rawPtr(d.c), rawPtr(d.u), rawPtr(d.c11), rawPtr(d.c12),
         rawPtr(d.c13), rawPtr(d.c22), rawPtr(d.c23), rawPtr(d.c33),

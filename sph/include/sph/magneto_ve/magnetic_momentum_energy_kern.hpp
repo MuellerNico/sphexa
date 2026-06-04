@@ -42,13 +42,14 @@ namespace sph::magneto
  */
 template<bool avClean, size_t stride = 1, class Tc, class Tm, class T, class Tm1>
 HOST_DEVICE_FUN inline void magneticMomentumJLoop(
-    cstone::LocalIndex i, Tc K, const Tc mu_0, const cstone::Box<Tc>& box, const cstone::LocalIndex* neighbors,
-    unsigned neighborsCount, const Tc* x, const Tc* y, const Tc* z, const T* vx, const T* vy, const T* vz, const T* h,
-    const Tm* m, const T* p, const T* tdpdTrho, const T* c, const Tc* u, const T* c11, const T* c12, const T* c13,
-    const T* c22, const T* c23, const T* c33, const T Atmin, const T Atmax, const T ramp, const T* wh, const T* kx,
-    const T* xm, const T* alpha, const T* dvxdx, const T* dvxdy, const T* dvxdz, const T* dvydx, const T* dvydy,
-    const T* dvydz, const T* dvzdx, const T* dvzdy, const T* dvzdz, const Tc* Bx, const Tc* By, const Tc* Bz,
-    const T* gradh, T* grad_P_x, T* grad_P_y, T* grad_P_z, Tm1* du, T* maxvsignal)
+    cstone::LocalIndex i, Tc K, const Tc mu_0, const Tc alpha_u, const cstone::Box<Tc>& box,
+    const cstone::LocalIndex* neighbors, unsigned neighborsCount, const Tc* x, const Tc* y, const Tc* z, const T* vx,
+    const T* vy, const T* vz, const T* h, const Tm* m, const T* p, const T* tdpdTrho, const T* c, const Tc* u,
+    const T* c11, const T* c12, const T* c13, const T* c22, const T* c23, const T* c33, const T Atmin, const T Atmax,
+    const T ramp, const T* wh, const T* kx, const T* xm, const T* alpha, const T* dvxdx, const T* dvxdy,
+    const T* dvxdz, const T* dvydx, const T* dvydy, const T* dvydz, const T* dvzdx, const T* dvzdy, const T* dvzdz,
+    const Tc* Bx, const Tc* By, const Tc* Bz, const T* gradh, T* grad_P_x, T* grad_P_y, T* grad_P_z, Tm1* du,
+    T* maxvsignal)
 {
 
     T    mu_0Inv = 1 / mu_0;
@@ -197,7 +198,7 @@ HOST_DEVICE_FUN inline void magneticMomentumJLoop(
         T wij             = rv / dist;
         T delta_u         = ui - uj;
         T viscosity_ij    = artificial_viscosity(alpha_i, alpha[j], magneticVsignali, magneticVsignalj, wij);
-        T heat_conduction = AV_heat_conduction(wij, rhoi, rhoj, proi, proj, delta_u);
+        T heat_conduction = AV_heat_conduction(alpha_u, wij, rhoi, rhoj, proi, proj, delta_u);
 
         // For time-step calculations
         T vijsignal = T(0.5) * (magneticVsignali + magneticVsignalj) - T(2) * wij;

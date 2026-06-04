@@ -102,10 +102,11 @@ void computeMagneticMomentumEnergyImpl(size_t startIndex, size_t endIndex, SimDa
 
         T maxvsignal = 0;
 
-        magneticMomentumJLoop<avClean>(i, d.K, md.mu_0, box, neighbors + d.ngmax * ni, ncCapped, x, y, z, vx, vy, vz, h,
-                                       m, p, tdpdTrho, c, u, c11, c12, c13, c22, c23, c33, d.Atmin, d.Atmax, d.ramp, wh,
-                                       kx, xm, alpha, dvxdx, dvxdy, dvxdz, dvydx, dvydy, dvydz, dvzdx, dvzdy, dvzdz, Bx,
-                                       By, Bz, gradh, grad_P_x, grad_P_y, grad_P_z, du, &maxvsignal);
+        magneticMomentumJLoop<avClean>(i, d.K, md.mu_0, md.alpha_u, box, neighbors + d.ngmax * ni, ncCapped, x, y, z,
+                                       vx, vy, vz, h, m, p, tdpdTrho, c, u, c11, c12, c13, c22, c23, c33, d.Atmin,
+                                       d.Atmax, d.ramp, wh, kx, xm, alpha, dvxdx, dvxdy, dvxdz, dvydx, dvydy, dvydz,
+                                       dvzdx, dvzdy, dvzdz, Bx, By, Bz, gradh, grad_P_x, grad_P_y, grad_P_z, du,
+                                       &maxvsignal);
 
         T rhoi            = kx[i] * m[i] / xm[i];
         T v_alfven2       = (Bx[i] * Bx[i] + By[i] * By[i] + Bz[i] * Bz[i]) / (md.mu_0 * rhoi);

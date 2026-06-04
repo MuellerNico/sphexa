@@ -87,6 +87,7 @@ HOST_DEVICE_FUN inline T artificial_viscosity(T alpha_i, T alpha_j, T c_i, T c_j
 /*! @brief calculate the AV heat conduction between a pair of two particles
  *
  * @tparam T      float or double
+ * @param alpha_u conductivity coefficient (0 disables the term)
  * @param w_ij    relative velocity (v_i - v_j), projected onto the connecting axis (r_i - r_j)
  * @param rho_i   baryonic density of particle i
  * @param rho_j   baryonic density of particle j
@@ -96,10 +97,8 @@ HOST_DEVICE_FUN inline T artificial_viscosity(T alpha_i, T alpha_j, T c_i, T c_j
  * @return        the heat conduction AV term
  */
 template<typename T>
-HOST_DEVICE_FUN inline T AV_heat_conduction(T w_ij, T rho_i, T rho_j, T p_i, T p_j, T delta_u)
+HOST_DEVICE_FUN inline T AV_heat_conduction(T alpha_u, T w_ij, T rho_i, T rho_j, T p_i, T p_j, T delta_u)
 {
-    constexpr T alfa_u = T(0.05);
-
     T heat_conduction = T(0.0);
     if (w_ij < T(0.0))
     {
@@ -112,7 +111,7 @@ HOST_DEVICE_FUN inline T AV_heat_conduction(T w_ij, T rho_i, T rho_j, T p_i, T p
         // T rho_ij     = T(0.5) * (rho_i + rho_j);
         // vij_signal_u = std::sqrt(std::abs(p_i - p_j) / rho_ij);
 
-        heat_conduction = alfa_u * vij_signal_u * delta_u;
+        heat_conduction = alpha_u * vij_signal_u * delta_u;
     }
 
     return heat_conduction;
