@@ -134,11 +134,7 @@ int main(int argc, char** argv)
     {
         using sph::magneto::ResistivityScheme;
         if (resistivity == "switch") { md.resistivityScheme = ResistivityScheme::Switch; }
-        else if (resistivity == "SLR")
-        {
-            md.resistivityScheme = ResistivityScheme::SLR;
-            if (rank == 0) { std::cout << "WARNING: --resistivity SLR not implemented, falling back to switch\n"; }
-        }
+        else if (resistivity == "SLR" || resistivity == "slr") { md.resistivityScheme = ResistivityScheme::SLR; }
         else
         {
             try { md.alpha_B_const = std::stod(resistivity); }
@@ -272,7 +268,7 @@ void printHelp(char* name, int rank)
         printf("\t--prop STRING \t Choice of SPH propagator [default: modern SPH]. For standard SPH, use \"std\" \n\n");
 
         printf("\t--resistivity STRING \t Artificial resistivity for the magneto-ve propagator:\n"
-               "\t\t\t \"switch\" (Tricco & Price 2013), \"SLR\" (not yet implemented, falls back to switch),\n"
+               "\t\t\t \"switch\" (Tricco & Price 2013), \"SLR\" (slope-limited reconstruction of B),\n"
                "\t\t\t or a number to set a constant alpha_B [default: switch]\n\n");
 
         printf("\t-s NUM \t\t int(NUM):  Number of iterations (time-steps) [200],\n\

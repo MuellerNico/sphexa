@@ -35,6 +35,9 @@
 #include "sph/kernels.hpp"
 #include "sph/table_lookup.hpp"
 
+#include "resistivity.hpp"
+#include "mhd_kernels.hpp"
+
 namespace sph::magneto
 {
 // free parameters in Wissing et al. (2020) model for parabolic div-B cleaning
@@ -48,7 +51,9 @@ inductionAndDissipationJLoop(cstone::LocalIndex i, Tc K, Tc mu_0, const cstone::
                              const Tc* z, const T* vx, const T* vy, const T* vz, const T* c, const Tc* Bx, const Tc* By,
                              const Tc* Bz, const T* h, const T* c11, const T* c12, const T* c13, const T* c22,
                              const T* c23, const T* c33, const T* wh, const T* xm, const T* kx, const T* gradh,
-                             const Tm* m, const T* psi_ch, Tc* dBxi, Tc* dByi, Tc* dBzi, Tc* dui, const T* alpha_B)
+                             const Tm* m, const T* psi_ch, Tc* dBxi, Tc* dByi, Tc* dBzi, Tc* dui, const T* alpha_B,
+                             const T* dBxdx, const T* dBxdy, const T* dBxdz, const T* dBydx, const T* dBydy,
+                             const T* dBydz, const T* dBzdx, const T* dBzdy, const T* dBzdz, ResistivityScheme scheme)
 {
     auto xi  = x[i];
     auto yi  = y[i];
@@ -80,6 +85,11 @@ inductionAndDissipationJLoop(cstone::LocalIndex i, Tc K, Tc mu_0, const cstone::
     auto Bzi      = Bz[i];
     auto psi_ch_i = psi_ch[i];
     auto alpha_Bi  = alpha_B[i];
+
+    cstone::Vec3<T> gradBx_i{dBxdx[i], dBxdy[i], dBxdz[i]};
+    cstone::Vec3<T> gradBy_i{dBydx[i], dBydy[i], dBydz[i]};
+    cstone::Vec3<T> gradBz_i{dBzdx[i], dBzdy[i], dBzdz[i]};
+    T eta_crit_i = std::cbrt(T(32) * T(M_PI) / T(3) / T(neighborsCount));
 
     cstone::Vec3<Tc> dB_diss    = {0.0, 0.0, 0.0};
     cstone::Vec3<Tc> divB_clean = {0.0, 0.0, 0.0};
@@ -146,6 +156,16 @@ inductionAndDissipationJLoop(cstone::LocalIndex i, Tc K, Tc mu_0, const cstone::
         T resistivity_ab = T(0.5) * alpha_B_avg * v_sigB * dist;
 
         cstone::Vec3<Tc> B_ab{Bxi - Bx[j], Byi - By[j], Bzi - Bz[j]};
+
+        if (scheme == ResistivityScheme::SLR)
+        {
+            Tc              eta_ab = (v1 < v2) ? v1 : v2; // spacing in units of h
+            cstone::Vec3<T> gradBx_j{dBxdx[j], dBxdy[j], dBxdz[j]};
+            cstone::Vec3<T> gradBy_j{dBydx[j], dBydy[j], dBydz[j]};
+            cstone::Vec3<T> gradBz_j{dBzdx[j], dBzdy[j], dBzdz[j]};
+            B_ab += mhdSLRCorrection<Tc, T>({rx, ry, rz}, eta_ab, eta_crit_i, T(1), T(1), gradBx_i, gradBy_i, gradBz_i,
+                                            gradBx_j, gradBy_j, gradBz_j);
+        }
 
         // We have 2*resistivity_ab because we use symmetric resisitivity
         // we divide by r^2 because we divide once to get the unit projector and again for the 1/r of the equation

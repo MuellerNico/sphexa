@@ -88,7 +88,17 @@ void computeIadFullDivvCurlvImpl(size_t startIndex, size_t endIndex, SimulationD
     auto* curlB_y = md.curlB_y.data();
     auto* curlB_z = md.curlB_z.data();
     auto* gradB_norm = md.gradB_norm.data();
-    auto* alpha_B = md.alpha_B.data();
+    auto* alpha_B    = md.alpha_B.data();
+
+    auto* dBxdx = md.dBxdx.data();
+    auto* dBxdy = md.dBxdy.data();
+    auto* dBxdz = md.dBxdz.data();
+    auto* dBydx = md.dBydx.data();
+    auto* dBydy = md.dBydy.data();
+    auto* dBydz = md.dBydz.data();
+    auto* dBzdx = md.dBzdx.data();
+    auto* dBzdy = md.dBzdy.data();
+    auto* dBzdz = md.dBzdz.data();
 
 #pragma omp parallel for
     for (size_t i = startIndex; i < endIndex; ++i)
@@ -104,8 +114,9 @@ void computeIadFullDivvCurlvImpl(size_t startIndex, size_t endIndex, SimulationD
                              dvydz, dvzdx, dvzdy, dvzdz);
 
         divB_curlB_JLoop(i, d.K, box, neighbors + d.ngmax * ni, ncCapped, x, y, z, Bx, By, Bz, h, c11, c12, c13, c22,
-                         c23, c33, wh, gradh, kx, xm, divB, curlB_x, curlB_y, curlB_z, gradB_norm, alpha_B,
-                         md.resistivityScheme, md.alpha_B_const);
+                         c23, c33, wh, gradh, kx, xm, divB, curlB_x, curlB_y, curlB_z, gradB_norm, alpha_B, dBxdx,
+                         dBxdy, dBxdz, dBydx, dBydy, dBydz, dBzdx, dBzdy, dBzdz, md.resistivityScheme,
+                         md.alpha_B_const);
     }
 }
 

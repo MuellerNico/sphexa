@@ -52,7 +52,9 @@ __global__ void inductionDissipationGPU(
     const T* h, const T* c11, const T* c12, const T* c13, const T* c22, const T* c23, const T* c33, const T* wh,
     const T* xm, const T* kx, const T* gradh, const Tm* m, const T* dvxdx, const T* dvxdy, const T* dvxdz,
     const T* dvydx, const T* dvydy, const T* dvydz, const T* dvzdx, const T* dvzdy, const T* dvzdz, T* psi_ch,
-    const T* divB, Tc* dBx, Tc* dBy, Tc* dBz, Tc* du, T* alpha_B, T* d_psi_ch, LocalIndex* nidx, TreeNodeIndex* globalPool)
+    const T* divB, Tc* dBx, Tc* dBy, Tc* dBz, Tc* du, T* alpha_B, T* d_psi_ch, const T* dBxdx, const T* dBxdy,
+    const T* dBxdz, const T* dBydx, const T* dBydy, const T* dBydz, const T* dBzdx, const T* dBzdy, const T* dBzdz,
+    ResistivityScheme scheme, LocalIndex* nidx, TreeNodeIndex* globalPool)
 {
     unsigned laneIdx     = threadIdx.x & (GpuConfig::warpSize - 1);
     unsigned targetIdx   = 0;
@@ -84,7 +86,8 @@ __global__ void inductionDissipationGPU(
         unsigned ncCapped = stl::min(ncTrue[0], ngmax);
         inductionAndDissipationJLoop<TravConfig::targetSize>(
             i, K, mu_0, box, neighborsWarp + laneIdx, ncCapped, x, y, z, vx, vy, vz, c, Bx, By, Bz, h, c11, c12, c13,
-            c22, c23, c33, wh, xm, kx, gradh, m, psi_ch, &dBx[i], &dBy[i], &dBz[i], &du[i], alpha_B);
+            c22, c23, c33, wh, xm, kx, gradh, m, psi_ch, &dBx[i], &dBy[i], &dBz[i], &du[i], alpha_B, dBxdx, dBxdy,
+            dBxdz, dBydx, dBydy, dBydz, dBzdx, dBzdy, dBzdz, scheme);
 
         // get psi time differential with the recipe of Wissing et al (2020)
         auto rho_i     = kx[i] * m[i] / xm[i];
@@ -113,7 +116,9 @@ void computeInductionAndDissipationGpu(const GroupView& grp, HydroData& d, Magne
         rawPtr(m.dvxdz), rawPtr(m.dvydx), rawPtr(m.dvydy), rawPtr(m.dvydz),
         rawPtr(m.dvzdx), rawPtr(m.dvzdy), rawPtr(m.dvzdz), rawPtr(m.psi_ch),
         rawPtr(m.divB), rawPtr(m.dBx), rawPtr(m.dBy), rawPtr(m.dBz),
-        rawPtr(d.du), rawPtr(m.alpha_B), rawPtr(m.d_psi_ch), nidxPool, traversalPool);
+        rawPtr(d.du), rawPtr(m.alpha_B), rawPtr(m.d_psi_ch), rawPtr(m.dBxdx), rawPtr(m.dBxdy), rawPtr(m.dBxdz),
+        rawPtr(m.dBydx), rawPtr(m.dBydy), rawPtr(m.dBydz), rawPtr(m.dBzdx), rawPtr(m.dBzdy), rawPtr(m.dBzdz),
+        m.resistivityScheme, nidxPool, traversalPool);
 }
 
 template void computeInductionAndDissipationGpu(const GroupView& grp, sphexa::ParticlesData<cstone::GpuTag>& d,

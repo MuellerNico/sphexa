@@ -90,6 +90,16 @@ void computeInductionAndDissipationImpl(size_t startIndex, size_t endIndex, SimD
     auto* du       = d.du.data();
     auto* alpha_B  = md.alpha_B.data();
 
+    const auto* dBxdx = md.dBxdx.data();
+    const auto* dBxdy = md.dBxdy.data();
+    const auto* dBxdz = md.dBxdz.data();
+    const auto* dBydx = md.dBydx.data();
+    const auto* dBydy = md.dBydy.data();
+    const auto* dBydz = md.dBydz.data();
+    const auto* dBzdx = md.dBzdx.data();
+    const auto* dBzdy = md.dBzdy.data();
+    const auto* dBzdz = md.dBzdz.data();
+
      // get mu_0 from simData, should maybe move it to MagnetoData
 
 #pragma omp parallel for
@@ -105,7 +115,8 @@ void computeInductionAndDissipationImpl(size_t startIndex, size_t endIndex, SimD
 
         inductionAndDissipationJLoop(i, d.K, md.mu_0, box, neighbors + d.ngmax * ni, ncCapped, x, y, z, vx, vy, vz, c,
                                      Bx, By, Bz, h, c11, c12, c13, c22, c23, c33, wh, xm, kx, gradh, m, psi_ch, &dBx[i],
-                                     &dBy[i], &dBz[i], &du[i], alpha_B);
+                                     &dBy[i], &dBz[i], &du[i], alpha_B, dBxdx, dBxdy, dBxdz, dBydx, dBydy, dBydz, dBzdx,
+                                     dBzdy, dBzdz, md.resistivityScheme);
 
         // get psi time differential with the recipe of Wissing et al (2020)
         auto rho_i     = kx[i] * m[i] / xm[i];

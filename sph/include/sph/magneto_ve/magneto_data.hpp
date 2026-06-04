@@ -109,6 +109,11 @@ public:
     // Artificial resistivity
     FieldVector<HydroType> alpha_B;
 
+    // Magnetic field Jacobian J_B (full 9 components, used by SLR resistivity)
+    FieldVector<HydroType> dBxdx, dBxdy, dBxdz;
+    FieldVector<HydroType> dBydx, dBydy, dBydz;
+    FieldVector<HydroType> dBzdx, dBzdy, dBzdz;
+
     /* Is this a good idea?
      *
      * //! @brief returns external magnetic field contribtion at @p pos and @p time
@@ -126,7 +131,8 @@ public:
     inline static constexpr std::array fieldNames{
         "Bx",     "By",       "Bz",          "dBx",   "dBy",     "dBz",     "dBx_m1", "dBy_m1", "dBz_m1",
         "psi_ch", "d_psi_ch", "d_psi_ch_m1", "dvxdx", "dvxdy",   " dvxdz",  "dvydx",  "dvydy",  "dvydz",
-        "dvzdx",  "dvzdy",    "dvzdz",       "divB",  "curlB_x", "curlB_y", "curlB_z", "gradB_norm", "alpha_B"};
+        "dvzdx",  "dvzdy",    "dvzdz",       "divB",  "curlB_x", "curlB_y", "curlB_z", "gradB_norm", "alpha_B",
+        "dBxdx",  "dBxdy",    "dBxdz",       "dBydx", "dBydy",   "dBydz",   "dBzdx",  "dBzdy",  "dBzdz"};
 
     static const inline std::string prefix{"magneto::"};
 
@@ -137,7 +143,8 @@ public:
     auto dataTuple()
     {
         auto ret = std::tie(Bx, By, Bz, dBx, dBy, dBz, dBx_m1, dBy_m1, dBz_m1, psi_ch, d_psi_ch, d_psi_ch_m1, dvxdx,
-                            dvxdy, dvxdz, dvydx, dvydy, dvydz, dvzdx, dvzdy, dvzdz, divB, curlB_x, curlB_y, curlB_z, gradB_norm, alpha_B);
+                            dvxdy, dvxdz, dvydx, dvydy, dvydz, dvzdx, dvzdy, dvzdz, divB, curlB_x, curlB_y, curlB_z,
+                            gradB_norm, alpha_B, dBxdx, dBxdy, dBxdz, dBydx, dBydy, dBydz, dBzdx, dBzdy, dBzdz);
 
 #if defined(__clang__) || __GNUC__ > 11
         static_assert(std::tuple_size_v<decltype(ret)> == fieldNames.size());

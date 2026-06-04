@@ -47,7 +47,8 @@ HOST_DEVICE_FUN inline void divB_curlB_JLoop(cstone::LocalIndex i, Tc K, const c
                                              const T* h, const T* c11, const T* c12, const T* c13, const T* c22,
                                              const T* c23, const T* c33, const T* wh, const T* gradh, const T* kx,
                                              const T* xm, T* divB, T* curlB_x, T* curlB_y, T* curlB_z, T* gradB_norm,
-                                             T* alpha_B, ResistivityScheme scheme, Tc alpha_B_const)
+                                             T* alpha_B, T* dBxdx, T* dBxdy, T* dBxdz, T* dBydx, T* dBydy, T* dBydz,
+                                             T* dBzdx, T* dBzdy, T* dBzdz, ResistivityScheme scheme, Tc alpha_B_const)
 {
     static constexpr T alpha_B_max = T(1.0); // temporary bounds for AR switch
     static constexpr T alpha_B_min = T(0.05);
@@ -116,10 +117,21 @@ HOST_DEVICE_FUN inline void divB_curlB_JLoop(cstone::LocalIndex i, Tc K, const c
 
     gradB_norm[i] = norm_kxi * std::sqrt(norm2(dBxi) + norm2(dByi) + norm2(dBzi));
 
+    dBxdx[i] = norm_kxi * dBxi[0];
+    dBxdy[i] = norm_kxi * dBxi[1];
+    dBxdz[i] = norm_kxi * dBxi[2];
+    dBydx[i] = norm_kxi * dByi[0];
+    dBydy[i] = norm_kxi * dByi[1];
+    dBydz[i] = norm_kxi * dByi[2];
+    dBzdx[i] = norm_kxi * dBzi[0];
+    dBzdy[i] = norm_kxi * dBzi[1];
+    dBzdz[i] = norm_kxi * dBzi[2];
+
     if (scheme == ResistivityScheme::Constant) { alpha_B[i] = alpha_B_const; }
+    else if (scheme == ResistivityScheme::SLR) { alpha_B[i] = T(1); }
     else
     {
-        // Switch (Tricco & Price 2013, eq. 16); SLR falls back here until implemented
+        // Switch (Tricco & Price 2013, eq. 16)
         T B_norm   = std::sqrt(Bxi * Bxi + Byi * Byi + Bzi * Bzi);
         T eps      = T(1e-20);
         T alpha_Bi = hi * gradB_norm[i] / (B_norm + eps);
