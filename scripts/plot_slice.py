@@ -94,11 +94,12 @@ _PLOT_AXES = {
 
 
 def compute_slice_grids(fname, step, field='rho', resolution=256,
-                        slice_axis='z', slice_pos=0.0):
-    """Read a step and SPH-interpolate `field` onto a 2D slice grid.
+                        slice_axis='z', slice_pos=0.0, scatter=False):
+    """Read a step; either SPH-interpolate `field` onto a 2D slice grid,
+    or (scatter=True) return the raw per-particle samples in the slab.
 
-    Returns a dict with the grid edges (xi, yi), the interpolated values, and
-    metadata. Does no plotting.
+    Returns a dict with metadata plus either (xi, yi, values) for grid mode
+    or (xs, ys, values) for scatter mode. Does no plotting.
     """
     print(f"Reading step {step} from {fname}...")
     with h5py.File(fname, "r") as f:
@@ -145,25 +146,46 @@ def compute_slice_grids(fname, step, field='rho', resolution=256,
     zoff = coords[slice_axis][mask] - slice_pos
     hs   = h[mask]
 
+    if scatter:
+        return {'step': step, 'time': time_val, 'res_label': res_label,
+                'field': field, 'label': label, 'mode': 'scatter',
+                'xs': xs, 'ys': ys, 'values': values[mask]}
+
     print(f"  Interpolating onto {resolution}x{resolution} grid...")
     xi, yi, di = sph_scatter_to_grid(xs, ys, zoff, hs, values[mask], resolution)
 
     return {'step': step, 'time': time_val, 'res_label': res_label,
-            'field': field, 'label': label,
+            'field': field, 'label': label, 'mode': 'grid',
             'xi': xi, 'yi': yi, 'values': di}
 
 
 def render_slice(grids, slice_axis='z', slice_pos=0.0, title=None,
-                 vmin=None, vmax=None, cmap='bone_r'):
-    """Plot a precomputed slice grid; returns a figure."""
+                 vmin=None, vmax=None, cmap='bone_r', point_size=1.0,
+                 n_contours=0, contour_color='black'):
+    """Plot a precomputed slice (grid or scatter); returns a figure."""
     ha, va = _PLOT_AXES[slice_axis]
-    xi, yi, di = grids['xi'], grids['yi'], grids['values']
     time_val = grids['time']
     header = title if title is not None else grids['label']
 
     fig, ax = plt.subplots(figsize=(8, 7))
     ax.set_aspect('equal', adjustable='box')
-    im = ax.pcolormesh(xi, yi, di, cmap=cmap, shading='auto', vmin=vmin, vmax=vmax)
+    if grids.get('mode') == 'scatter':
+        im = ax.scatter(grids['xs'], grids['ys'], c=grids['values'],
+                        s=point_size, cmap=cmap, linewidths=0,
+                        vmin=vmin, vmax=vmax, rasterized=True)
+        if n_contours > 0:
+            print("  (contours skipped: not supported in --scatter mode)")
+    else:
+        xi, yi, di = grids['xi'], grids['yi'], grids['values']
+        im = ax.pcolormesh(xi, yi, di, cmap=cmap, shading='auto',
+                           vmin=vmin, vmax=vmax)
+        if n_contours > 0:
+            lo = vmin if vmin is not None else np.nanmin(di)
+            hi = vmax if vmax is not None else np.nanmax(di)
+            xc = 0.5 * (xi[0, :-1] + xi[0, 1:])
+            yc = 0.5 * (yi[:-1, 0] + yi[1:, 0])
+            ax.contour(xc, yc, di, levels=np.linspace(lo, hi, n_contours),
+                       colors=contour_color, linewidths=0.4, alpha=0.7)
     cbar = fig.colorbar(im, ax=ax, shrink=0.8)
     cbar.set_label(grids['label'])
     ax.set_xlabel(ha)
@@ -184,33 +206,40 @@ def shared_ranges(grids, vmin=None, vmax=None):
     return vmin, vmax
 
 
-def _save_png(fig, fname, step, field, slice_axis, slice_pos):
+def _save_png(fig, fname, step, field, slice_axis, slice_pos, scatter=False):
     outdir = os.path.dirname(os.path.abspath(fname))
     short = field.split('::')[-1]
-    outname = os.path.join(outdir, f"slice_{short}_step{step}_{slice_axis}{slice_pos:+.4f}.png")
+    suffix = '_scatter' if scatter else ''
+    outname = os.path.join(outdir, f"slice_{short}_step{step}_{slice_axis}{slice_pos:+.4f}{suffix}.png")
     fig.savefig(outname, dpi=150, bbox_inches='tight')
     plt.close(fig)
     print(f"Saved: {outname}")
 
 
 def plot_slice(fname, step, field='rho', resolution=256, slice_axis='z',
-               slice_pos=0.0, title=None, vmin=None, vmax=None, cmap='bone_r'):
+               slice_pos=0.0, title=None, vmin=None, vmax=None, cmap='bone_r',
+               scatter=False, point_size=1.0,
+               n_contours=0, contour_color='black'):
     """Compute and plot a single 2D slice, saved as PNG."""
-    g = compute_slice_grids(fname, step, field, resolution, slice_axis, slice_pos)
-    fig = render_slice(g, slice_axis, slice_pos, title, vmin, vmax, cmap)
-    _save_png(fig, fname, step, field, slice_axis, slice_pos)
+    g = compute_slice_grids(fname, step, field, resolution, slice_axis, slice_pos, scatter)
+    fig = render_slice(g, slice_axis, slice_pos, title, vmin, vmax, cmap, point_size,
+                       n_contours, contour_color)
+    _save_png(fig, fname, step, field, slice_axis, slice_pos, scatter)
 
 
 def plot_all_steps(fname, steps, field='rho', resolution=256, slice_axis='z',
-                   slice_pos=0.0, title=None, vmin=None, vmax=None, cmap='bone_r'):
+                   slice_pos=0.0, title=None, vmin=None, vmax=None, cmap='bone_r',
+                   scatter=False, point_size=1.0,
+                   n_contours=0, contour_color='black'):
     """One PNG per step, sharing one colormap range across all steps."""
-    grids = [compute_slice_grids(fname, s, field, resolution, slice_axis, slice_pos)
+    grids = [compute_slice_grids(fname, s, field, resolution, slice_axis, slice_pos, scatter)
              for s in steps]
     vmin, vmax = shared_ranges(grids, vmin, vmax)
     print(f"Shared {field} scale: [{vmin:.6f}, {vmax:.6f}]")
     for g in grids:
-        fig = render_slice(g, slice_axis, slice_pos, title, vmin, vmax, cmap)
-        _save_png(fig, fname, g['step'], field, slice_axis, slice_pos)
+        fig = render_slice(g, slice_axis, slice_pos, title, vmin, vmax, cmap, point_size,
+                           n_contours, contour_color)
+        _save_png(fig, fname, g['step'], field, slice_axis, slice_pos, scatter)
 
 
 if __name__ == "__main__":
@@ -250,6 +279,14 @@ if __name__ == "__main__":
                         help="Upper colormap limit (default: auto)")
     parser.add_argument("--cmap", default="RdBu",
                         help="Matplotlib colormap name (default: RdBu)")
+    parser.add_argument("--scatter", action="store_true",
+                        help="Skip SPH interpolation; render raw particle scatter (fast)")
+    parser.add_argument("--point-size", type=float, default=1.0,
+                        help="Scatter marker size (only used with --scatter; default: 1.0)")
+    parser.add_argument("--contours", type=int, default=0, metavar="N",
+                        help="Overlay N isocontours on grid plots (default: 0 = off)")
+    parser.add_argument("--contour-color", default="black",
+                        help="Contour line color (default: black)")
 
     args = parser.parse_args()
 
@@ -259,7 +296,8 @@ if __name__ == "__main__":
 
     common = dict(field=args.field, resolution=args.resolution, slice_axis=args.axis,
                   slice_pos=args.pos, title=args.title, vmin=args.vmin, vmax=args.vmax,
-                  cmap=args.cmap)
+                  cmap=args.cmap, scatter=args.scatter, point_size=args.point_size,
+                  n_contours=args.contours, contour_color=args.contour_color)
 
     if args.all:
         nsteps = get_nsteps(args.file)

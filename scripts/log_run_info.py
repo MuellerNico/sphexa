@@ -88,6 +88,26 @@ def collect_dump(h5file: Path):
     return info
 
 
+def detect_git():
+    repo = Path(__file__).resolve().parent
+    try:
+        out = subprocess.run(
+            ["git", "describe", "--always", "--long", "--dirty", "--tags"],
+            capture_output=True, text=True, timeout=5, cwd=repo,
+        )
+        if out.returncode == 0 and out.stdout.strip():
+            desc = out.stdout.strip()
+            branch = subprocess.run(
+                ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+                capture_output=True, text=True, timeout=5, cwd=repo,
+            )
+            b = branch.stdout.strip()
+            return f"{desc} ({b})" if branch.returncode == 0 and b else desc
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        pass
+    return "n/a"
+
+
 def detect_gpu():
     try:
         out = subprocess.run(
@@ -146,6 +166,7 @@ def main():
         f.write(f"end: {end_dt.isoformat(timespec='seconds')}\n")
         f.write(f"runtime: {runtime_str}\n")
         f.write(f"hostname: {socket.gethostname()}\n")
+        f.write(f"git: {detect_git()}\n")
         f.write(f"gpu: {detect_gpu()}\n")
         if n_particles is not None:
             f.write(f"particles: {n_particles} ({resolution_label(extents, n_particles)})\n")
