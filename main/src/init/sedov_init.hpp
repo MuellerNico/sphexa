@@ -98,7 +98,7 @@ void initSedovFields(Dataset& d, const std::map<std::string, double>& constants)
         T r2 = norm2(cstone::Vec3<T>{x[i], y[i], z[i]});
         u[i] = ener0 * exp(-(r2 / width2)) + constants.at("u0");
     }
-    if (d.u.empty())
+    if (!d.temp.empty())
     {
         std::for_each(u.begin(), u.end(), [cvm1 = 1.0 / cv](auto& t) { t *= cvm1; });
         d.temp = std::move(u);

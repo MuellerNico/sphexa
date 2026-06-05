@@ -129,7 +129,7 @@ void initKelvinHelmholtzFields(Dataset& d, const std::map<std::string, double>& 
     cstone::scaleGpuAcc<gpu>(d.vx.data(), d.vx.data() + d.vx.size(), d.x_m1.data(), constants.at("minDt"));
     cstone::scaleGpuAcc<gpu>(d.vy.data(), d.vy.data() + d.vy.size(), d.y_m1.data(), constants.at("minDt"));
 
-    if (d.u.empty())
+    if (!d.temp.empty())
     {
         std::for_each(u.begin(), u.end(), [cvm1 = 1.0 / cv](auto& t) { t *= cvm1; });
         d.temp = std::move(u);
