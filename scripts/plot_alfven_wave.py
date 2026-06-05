@@ -10,6 +10,8 @@ import os
 import sys
 import argparse
 
+from _h5_common import print_metadata, get_nsteps, resolution_label
+
 
 # Wave parameters from main/src/init/alfven_wave_init.hpp::ALfvenWaveConstants
 SIN_A = 2.0 / 3.0
@@ -34,42 +36,6 @@ def rotation_to_rotated(sinA=SIN_A, sinB=SIN_B):
         [-sinB,       cosB,        0.0 ],
         [-sinA*cosB, -sinA*sinB,   cosA],
     ])
-
-
-def print_metadata(fname):
-    """Print all available fields, dimensions, attributes, and step info."""
-    with h5py.File(fname, "r") as f:
-        print(f"=== HDF5 Metadata: {fname} ===")
-
-        nsteps = len([k for k in f.keys() if k.startswith("Step#")])
-        print(f"Number of steps: {nsteps}")
-        print(f"{'Step':>8s} {'Iteration':>12s} {'Time':>15s} {'N particles':>14s}")
-        print("-" * 52)
-
-        for i in range(nsteps):
-            step = f[f"Step#{i}"]
-            iteration = step.attrs.get("iteration", [None])[0]
-            time = step.attrs.get("time", [None])[0]
-            n = None
-            for key in step.keys():
-                ds = step[key]
-                if hasattr(ds, 'shape') and len(ds.shape) > 0:
-                    n = ds.shape[0]
-                    break
-            print(f"{i:>8d} {iteration:>12} {time:>15.8f} {n:>14}")
-
-        if nsteps > 0:
-            step0 = f["Step#0"]
-            print(f"\nDatasets in Step#0:")
-            for key in sorted(step0.keys()):
-                ds = step0[key]
-                print(f"  {key:>20s}  shape={ds.shape}  dtype={ds.dtype}")
-
-            print(f"\nAttributes in Step#0:")
-            for attr in sorted(step0.attrs.keys()):
-                val = step0.attrs[attr]
-                print(f"  {attr:>20s} = {val}")
-        print()
 
 
 def read_step(fname, step):
@@ -112,9 +78,11 @@ def render_alfven_wave(fname, step, v_alfven=None):
     x1, B2 = compute_x1_b2(h5step)
     time_val = h5step.attrs["time"][0]
     n_particles = len(x1)
-    n_cbrt = round(n_particles ** (1.0 / 3.0), 1)
+    extents = [np.asarray(h5step[ax]).max() - np.asarray(h5step[ax]).min()
+               for ax in ('x', 'y', 'z')]
+    res_label = resolution_label(extents, n_particles)
 
-    print(f"Step {step}: time={time_val:.8f}, N={n_particles} (~{n_cbrt}^3)")
+    print(f"Step {step}: time={time_val:.8f}, N={n_particles} ({res_label})")
     print(f"  x1: [{x1.min():.4f}, {x1.max():.4f}]")
     print(f"  B2: [{B2.min():.6f}, {B2.max():.6f}]")
 
@@ -131,6 +99,7 @@ def render_alfven_wave(fname, step, v_alfven=None):
     ax.set_xlabel("x1")
     ax.set_ylabel("B2")
     ax.set_title(f"Alfvèn Wave, L1={L1}, time: [{time_val}]")
+    fig.text(0.98, 0.02, f"Resolution: {res_label}", fontsize=10, ha='right')
     plt.tight_layout()
 
     f.close()
@@ -213,14 +182,27 @@ if __name__ == "__main__":
             "  %(prog)s data.h5 -p           Print metadata\n"
             "  %(prog)s data.h5 5            PNG of B2 vs x1 at step 5\n"
             "  %(prog)s data.h5 0-100        GIF of steps 0..100\n"
+            "  %(prog)s data.h5 --all        PNG of B2 vs x1 for every step\n"
         ),
     )
     parser.add_argument("file", help="HDF5 input file")
     parser.add_argument("step", nargs="?", help="Step number, range (e.g. 0-20), or omit for metadata")
+    parser.add_argument("-a", "--all", action="store_true",
+                        help="Plot every step in the file as an individual PNG")
     parser.add_argument("--v-alfven", type=float, default=None,
                         help="Override Alfvèn speed (default: sqrt(B_par^2/(mu_0*rho))=1.0)")
 
     args = parser.parse_args()
+
+    if args.all:
+        nsteps = get_nsteps(args.file)
+        if nsteps == 0:
+            print(f"No steps found in {args.file}")
+            sys.exit(1)
+        print(f"Plotting all {nsteps} steps...")
+        for step in range(nsteps):
+            plot_alfven_wave(args.file, step, v_alfven=args.v_alfven)
+        sys.exit(0)
 
     if args.step is None or args.step == "-p":
         print_metadata(args.file)
