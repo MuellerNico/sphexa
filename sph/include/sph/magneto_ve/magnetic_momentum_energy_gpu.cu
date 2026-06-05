@@ -112,7 +112,7 @@ magneticMomentumGpu(Tc K, Tc Kcour, T Atmin, T Atmax, T ramp, unsigned ngmax, co
             auto min_dt_group = cstone::warpMin(dt_lane);
             if ((threadIdx.x & (GpuConfig::warpSize - 1)) == 0)
             {
-                groupDt[targetIdx] = stl::min(groupDt[targetIdx], min_dt_group);
+                groupDt[targetIdx] = stl::min(groupDt[targetIdx], static_cast<float>(min_dt_group));
             }
         }
 
