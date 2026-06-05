@@ -198,7 +198,7 @@ HOST_DEVICE_FUN inline void magneticMomentumJLoop(
         T wij             = rv / dist;
         T delta_u         = ui - uj;
         T viscosity_ij    = artificial_viscosity(alpha_i, alpha[j], magneticVsignali, magneticVsignalj, wij);
-        T heat_conduction = AV_heat_conduction(alpha_u, wij, rhoi, rhoj, proi, proj, delta_u);
+        T heat_conduction = AV_heat_conduction(T(alpha_u), wij, rhoi, rhoj, proi, proj, delta_u);
 
         // For time-step calculations
         T vijsignal = T(0.5) * (magneticVsignali + magneticVsignalj) - T(2) * wij;
