@@ -1,22 +1,13 @@
-"""Shared helpers for SPHEXA HDF5 plotting scripts.
-
-Provides metadata inspection and a derived-field resolver. Plot scripts call
-`resolve_field(step_group, name)` to get a per-particle array plus a display
-label for either a raw HDF5 dataset or a derived quantity (e.g. `Bmag`,
-`log_divBerr`). New derived fields are added via the `@_derive` decorator
-below -- no changes needed in the consumer scripts.
-"""
+# Shared helpers for the SPHEXA HDF5 plotting scripts: metadata inspection and
+# a derived-field resolver. Scripts call resolve_field(step_group, name) to get
+# a per-particle array + display label for a raw dataset or a derived quantity
+# (Bmag, log_divBerr, ...). Add new derived fields with the @_derive decorator
+# below; the consumer scripts need no changes.
 
 import h5py
 import numpy as np
 
-
-# ---------------------------------------------------------------------------
-# Field resolver
-# ---------------------------------------------------------------------------
-
-# Pretty labels for raw datasets that benefit from LaTeX rendering. Anything
-# not in this map falls back to the dataset name verbatim.
+# Pretty labels for datasets
 _RAW_LABELS = {
     'rho':                  'density',
     'p':                    r'$P$',
@@ -88,6 +79,14 @@ def _Pmag(s):
     return _Emag(s) / mu0
 
 
+@_derive('vmag', r'$|v|$',
+         ['vx', 'vy', 'vz'])
+def _vmag(s):
+    return np.sqrt(_arr(s, 'vx')**2 +
+                   _arr(s, 'vy')**2 +
+                   _arr(s, 'vz')**2)
+
+
 @_derive('KE', 'kinetic energy density',
          ['rho', 'vx', 'vy', 'vz'])
 def _KE(s):
@@ -96,11 +95,8 @@ def _KE(s):
                                    _arr(s, 'vz')**2)
 
 
+# (values, label) for a raw dataset or a derived field; s is an open Step#i group.
 def resolve_field(s, name):
-    """Return (values, label) for either a raw h5 dataset or a derived field.
-
-    `s` is an open `h5py.Group` (a `Step#i` group).
-    """
     if name in s:
         return _arr(s, name), _RAW_LABELS.get(name, name)
     if name in _DERIVED:
@@ -114,31 +110,29 @@ def resolve_field(s, name):
     )
 
 
+# (raw dataset names, derived names whose deps are all present in s).
 def available_fields(s):
-    """Return (raw_dataset_names, derived_names_that_resolve_against_s)."""
     raw_keys = set(s.keys())
     raw = sorted(raw_keys)
     derived = [n for n, (_, _, deps) in _DERIVED.items() if deps.issubset(raw_keys)]
     return raw, derived
 
 
+# Display label for a derived field name.
 def derived_label(name):
-    """Display label for a derived field name."""
     return _DERIVED[name][1]
 
 
-# ---------------------------------------------------------------------------
-# Step / metadata helpers
-# ---------------------------------------------------------------------------
+# --- metadata helpers ---
 
 def get_nsteps(fname):
     with h5py.File(fname, "r") as f:
         return len([k for k in f.keys() if k.startswith("Step#")])
 
 
+# Print the step summary, the raw datasets in Step#0, and which derived fields
+# resolve from them.
 def print_metadata(fname):
-    """Print step summary, raw datasets in Step#0, and derived fields that
-    can be resolved from those datasets."""
     with h5py.File(fname, "r") as f:
         print(f"=== HDF5 Metadata: {fname} ===")
 
@@ -173,20 +167,12 @@ def print_metadata(fname):
         print()
 
 
-# ---------------------------------------------------------------------------
-# Domain resolution
-# ---------------------------------------------------------------------------
+# --- domain resolution ---
 
+# Per-axis particle count for uniform glass tiling
+# (simply particle count cbrt split by box aspect ratio)
+# smears over any internal density jump
 def effective_resolution(extents, n_particles):
-    """Per-dimension particle count for a uniform-density glass tiling.
-
-    Mean spacing is constant across a glass-tiled domain, so each axis carries
-    extent/spacing particles and nx*ny*nz == n_particles by construction. This
-    is the cube root split by the box aspect ratio: it captures domain shape
-    (slab/box/cube) but smears over any density jump within the domain.
-    `extents` is (Lx, Ly, Lz). Returns (nx, ny, nz), or None for missing or
-    degenerate input.
-    """
     if extents is None or not n_particles:
         return None
     lx, ly, lz = (float(e) for e in extents)
@@ -196,13 +182,8 @@ def effective_resolution(extents, n_particles):
     return lx / spacing, ly / spacing, lz / spacing
 
 
+# Compact resolution string for annotations
 def resolution_label(extents, n_particles):
-    """Compact resolution string for plot annotations and logs.
-
-    '~50.0^3' for (near-)cubic domains, '~896x448x18, ~100.0^3 total' for
-    slabs and boxes -- the trailing cube root is the per-side count users pass
-    to sphexa via -n.
-    """
     n_cbrt = round(n_particles ** (1.0 / 3.0), 1) if n_particles else None
     res = effective_resolution(extents, n_particles)
     if res is None:

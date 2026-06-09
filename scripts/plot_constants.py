@@ -22,8 +22,14 @@ COLUMNS = [
     "eMag",           # 9  md.eMag
     "meanDivBError",  # 10 md.meanDivBError
     "maxDivBError",   # 11 md.maxDivBError
-    "khgr",           # 12 KH growth rate (magnetic Kelvin-Helmholtz only)
+    "extra",          # 12 test-specific scalar: KH growth rate (kh) or RMS Mach number (turb)
 ]
+
+# label + panel title for the trailing test-specific column (index 12), by --kind
+EXTRA_LABELS = {
+    "turb": "RMS Mach number",
+    "kh":   "KH growth rate",
+}
 
 
 def load(fname):
@@ -34,14 +40,15 @@ def load(fname):
     return {col: data[:, i] for i, col in enumerate(COLUMNS[:ncols])}
 
 
-def plot_constants(fname, show=False):
+def plot_constants(fname, show=False, kind="turb"):
     d = load(fname)
     it = d["iteration"]
     final_time = d["ttot"][-1]
 
-    has_khgr = "khgr" in d
-    n_panels = 7 if has_khgr else 6
-    fig, axes = plt.subplots(n_panels, 1, figsize=(10, 19 + (3 if has_khgr else 0)), sharex=True)
+    extra_label = EXTRA_LABELS.get(kind, "extra (col 12)")
+    has_extra = "extra" in d
+    n_panels = 7 if has_extra else 6
+    fig, axes = plt.subplots(n_panels, 1, figsize=(10, 19 + (3 if has_extra else 0)), sharex=True)
     fig.subplots_adjust(hspace=0.08, top=0.93, bottom=0.05, left=0.12, right=0.97)
 
     fig.suptitle(
@@ -128,17 +135,17 @@ def plot_constants(fname, show=False):
     # --- Panel 6: Minimum timestep ---
     ax = axes[5]
     ax.set_ylabel("minDt")
-    if not has_khgr:
+    if not has_extra:
         ax.set_xlabel("Iteration")
     ax.plot(it, d["minDt"], color="tab:green", linewidth=1.2)
     ax.grid(True, alpha=0.3)
 
-    # --- Panel 7: Kelvin-Helmholtz growth rate (only for magnetic KH runs) ---
-    if has_khgr:
+    # --- Panel 7: test-specific scalar (turbulence RMS Mach number, or magnetic KH growth rate) ---
+    if has_extra:
         ax = axes[6]
-        ax.set_ylabel("KH growth rate")
+        ax.set_ylabel(extra_label)
         ax.set_xlabel("Iteration")
-        ax.plot(it, d["khgr"], color="tab:orange", linewidth=1.2)
+        ax.plot(it, d["extra"], color="tab:orange", linewidth=1.2)
         ax.grid(True, alpha=0.3)
 
     outdir = os.path.dirname(os.path.abspath(fname))
@@ -157,6 +164,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Plot simulation diagnostics from constants.txt")
     parser.add_argument("file", help="Path to constants.txt")
     parser.add_argument("--show", action="store_true", help="Show interactive plot")
+    parser.add_argument("--kind", choices=["turb", "kh"], default="turb",
+                        help="meaning of the trailing column 12: 'turb' = RMS Mach number (default), "
+                             "'kh' = magnetic Kelvin-Helmholtz growth rate")
     args = parser.parse_args()
 
-    plot_constants(args.file, show=args.show)
+    plot_constants(args.file, show=args.show, kind=args.kind)

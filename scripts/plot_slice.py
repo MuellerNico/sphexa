@@ -6,6 +6,7 @@ import numpy as np
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+from matplotlib.colors import LogNorm
 
 import os
 import sys
@@ -14,12 +15,9 @@ import argparse
 from _h5_common import print_metadata, get_nsteps, resolve_field, resolution_label
 
 
+# M4 cubic-spline SPH kernel shape in 3D (q = r/h). The 1/h**3 factor is left
+# off; it cancels in the normalized interpolation in sph_scatter_to_grid.
 def cubic_spline_3d(q):
-    """Cubic spline (M4) SPH kernel shape in 3D. q = r/h.
-
-    Returns sigma_3D * f(q). The 1/h**3 factor of the full kernel is omitted:
-    it cancels in the normalized SPH interpolation (see sph_scatter_to_grid).
-    """
     sigma = 1.0 / np.pi
     w = np.zeros_like(q)
     m1 = q <= 1.0
@@ -29,18 +27,11 @@ def cubic_spline_3d(q):
     return sigma * w
 
 
+# SPH-interpolate a per-particle field onto a 2D slice grid. Each particle
+# uses the full 3D kernel attenuated by its offset from the plane (not a thin
+# slab), normalized as sum(v*w)/sum(w) so a constant field is reproduced
+# exactly. Returns (xi, yi, field) with xi/yi the cell edges.
 def sph_scatter_to_grid(xs, ys, zoff, hs, values, resolution=256):
-    """Interpolate a per-particle field onto a 2D slice grid (3D SPH kernel).
-
-    Each particle contributes through the full 3D kernel attenuated by its
-    perpendicular offset from the slice plane (not a thin-slab projection).
-    Returns the normalized SPH estimate
-        field(x) = sum_j values_j f(q_j) / sum_j f(q_j)
-    which reproduces a constant field exactly. With SPHEXA's equal-mass
-    particles and h ~ (m/rho)^(1/3) this is the standard volume-normalized
-    SPH interpolant for density and matches a kernel average for any other
-    field.
-    """
     xmin, xmax = xs.min(), xs.max()
     ymin, ymax = ys.min(), ys.max()
     dx = (xmax - xmin) / resolution
@@ -85,7 +76,7 @@ def sph_scatter_to_grid(xs, ys, zoff, hs, values, resolution=256):
     return xi, yi, field
 
 
-# Axes plotted for each slice axis: (horizontal, vertical)
+# map slice axis -> plotting axes
 _PLOT_AXES = {
     'z': ('x', 'y'),
     'y': ('x', 'z'),
@@ -93,14 +84,11 @@ _PLOT_AXES = {
 }
 
 
+# Read one step and return a dict of metadata plus the slice data: either an
+# interpolated grid (xi, yi, values) or, with scatter=True, the raw per-particle
+# samples in the slab (xs, ys, values). No plotting here.
 def compute_slice_grids(fname, step, field='rho', resolution=256,
                         slice_axis='z', slice_pos=0.0, scatter=False):
-    """Read a step; either SPH-interpolate `field` onto a 2D slice grid,
-    or (scatter=True) return the raw per-particle samples in the slab.
-
-    Returns a dict with metadata plus either (xi, yi, values) for grid mode
-    or (xs, ys, values) for scatter mode. Does no plotting.
-    """
     print(f"Reading step {step} from {fname}...")
     with h5py.File(fname, "r") as f:
         key = f"Step#{step}"
@@ -159,32 +147,39 @@ def compute_slice_grids(fname, step, field='rho', resolution=256,
             'xi': xi, 'yi': yi, 'values': di}
 
 
+# Plot a precomputed slice (grid or scatter) and return the figure.
 def render_slice(grids, slice_axis='z', slice_pos=0.0, title=None,
-                 vmin=None, vmax=None, cmap='bone_r', point_size=1.0,
+                 vmin=None, vmax=None, cmap='bone_r', log=False, point_size=1.0,
                  n_contours=0, contour_color='black'):
-    """Plot a precomputed slice (grid or scatter); returns a figure."""
     ha, va = _PLOT_AXES[slice_axis]
     time_val = grids['time']
     header = title if title is not None else grids['label']
+
+    # Log colormap: pass via norm= (and don't also pass vmin/vmax).
+    color_kw = ({'norm': LogNorm(vmin=vmin, vmax=vmax)} if log
+                else {'vmin': vmin, 'vmax': vmax})
 
     fig, ax = plt.subplots(figsize=(8, 7))
     ax.set_aspect('equal', adjustable='box')
     if grids.get('mode') == 'scatter':
         im = ax.scatter(grids['xs'], grids['ys'], c=grids['values'],
                         s=point_size, cmap=cmap, linewidths=0,
-                        vmin=vmin, vmax=vmax, rasterized=True)
+                        rasterized=True, **color_kw)
         if n_contours > 0:
             print("  (contours skipped: not supported in --scatter mode)")
     else:
         xi, yi, di = grids['xi'], grids['yi'], grids['values']
-        im = ax.pcolormesh(xi, yi, di, cmap=cmap, shading='auto',
-                           vmin=vmin, vmax=vmax)
+        im = ax.pcolormesh(xi, yi, di, cmap=cmap, shading='auto', **color_kw)
         if n_contours > 0:
             lo = vmin if vmin is not None else np.nanmin(di)
             hi = vmax if vmax is not None else np.nanmax(di)
             xc = 0.5 * (xi[0, :-1] + xi[0, 1:])
             yc = 0.5 * (yi[:-1, 0] + yi[1:, 0])
-            ax.contour(xc, yc, di, levels=np.linspace(lo, hi, n_contours),
+            if log and lo > 0:
+                levels = np.geomspace(lo, hi, n_contours)
+            else:
+                levels = np.linspace(lo, hi, n_contours)
+            ax.contour(xc, yc, di, levels=levels,
                        colors=contour_color, linewidths=0.4, alpha=0.7)
     cbar = fig.colorbar(im, ax=ax, shrink=0.8)
     cbar.set_label(grids['label'])
@@ -197,10 +192,20 @@ def render_slice(grids, slice_axis='z', slice_pos=0.0, title=None,
     return fig
 
 
-def shared_ranges(grids, vmin=None, vmax=None):
-    """Global colormap limits across all grids; user-supplied values win."""
+# Common colormap limits across all grids; explicit vmin/vmax always win. With
+# log=True, auto vmin is the smallest positive value (LogNorm needs vmin > 0).
+def shared_ranges(grids, vmin=None, vmax=None, log=False):
     if vmin is None:
-        vmin = min(np.nanmin(g['values']) for g in grids)
+        if log:
+            mins = []
+            for g in grids:
+                v = g['values']
+                pos = v[(v > 0) & np.isfinite(v)]
+                if pos.size:
+                    mins.append(pos.min())
+            vmin = min(mins) if mins else None
+        else:
+            vmin = min(np.nanmin(g['values']) for g in grids)
     if vmax is None:
         vmax = max(np.nanmax(g['values']) for g in grids)
     return vmin, vmax
@@ -216,28 +221,28 @@ def _save_png(fig, fname, step, field, slice_axis, slice_pos, scatter=False):
     print(f"Saved: {outname}")
 
 
+# Compute and plot a single slice, saved as PNG.
 def plot_slice(fname, step, field='rho', resolution=256, slice_axis='z',
                slice_pos=0.0, title=None, vmin=None, vmax=None, cmap='bone_r',
-               scatter=False, point_size=1.0,
+               log=False, scatter=False, point_size=1.0,
                n_contours=0, contour_color='black'):
-    """Compute and plot a single 2D slice, saved as PNG."""
     g = compute_slice_grids(fname, step, field, resolution, slice_axis, slice_pos, scatter)
-    fig = render_slice(g, slice_axis, slice_pos, title, vmin, vmax, cmap, point_size,
+    fig = render_slice(g, slice_axis, slice_pos, title, vmin, vmax, cmap, log, point_size,
                        n_contours, contour_color)
     _save_png(fig, fname, step, field, slice_axis, slice_pos, scatter)
 
 
+# One PNG per step, sharing a single colormap range across all of them.
 def plot_all_steps(fname, steps, field='rho', resolution=256, slice_axis='z',
                    slice_pos=0.0, title=None, vmin=None, vmax=None, cmap='bone_r',
-                   scatter=False, point_size=1.0,
+                   log=False, scatter=False, point_size=1.0,
                    n_contours=0, contour_color='black'):
-    """One PNG per step, sharing one colormap range across all steps."""
     grids = [compute_slice_grids(fname, s, field, resolution, slice_axis, slice_pos, scatter)
              for s in steps]
-    vmin, vmax = shared_ranges(grids, vmin, vmax)
-    print(f"Shared {field} scale: [{vmin:.6f}, {vmax:.6f}]")
+    vmin, vmax = shared_ranges(grids, vmin, vmax, log)
+    print(f"Shared {field} scale: [{vmin:.6f}, {vmax:.6f}]" + (" (log)" if log else ""))
     for g in grids:
-        fig = render_slice(g, slice_axis, slice_pos, title, vmin, vmax, cmap, point_size,
+        fig = render_slice(g, slice_axis, slice_pos, title, vmin, vmax, cmap, log, point_size,
                            n_contours, contour_color)
         _save_png(fig, fname, g['step'], field, slice_axis, slice_pos, scatter)
 
@@ -253,7 +258,6 @@ if __name__ == "__main__":
             "  %(prog)s data.h5 5 --field Bmag             PNG of |B| at step 5\n"
             "  %(prog)s data.h5 --all --field magneto::alpha_B\n"
             "  %(prog)s data.h5 5 --axis x --pos 0.5\n"
-            "\nUse plot_gif.py for animated GIFs over a step range.\n"
         ),
     )
     parser.add_argument("file", help="HDF5 input file")
@@ -279,6 +283,9 @@ if __name__ == "__main__":
                         help="Upper colormap limit (default: auto)")
     parser.add_argument("--cmap", default="RdBu",
                         help="Matplotlib colormap name (default: RdBu)")
+    parser.add_argument("-l", "--log", action="store_true",
+                        help="Use a log-scale colormap (LogNorm). Best for positive "
+                             "fields like rho, Bmag, vmag, Emag.")
     parser.add_argument("--scatter", action="store_true",
                         help="Skip SPH interpolation; render raw particle scatter (fast)")
     parser.add_argument("--point-size", type=float, default=1.0,
@@ -296,7 +303,8 @@ if __name__ == "__main__":
 
     common = dict(field=args.field, resolution=args.resolution, slice_axis=args.axis,
                   slice_pos=args.pos, title=args.title, vmin=args.vmin, vmax=args.vmax,
-                  cmap=args.cmap, scatter=args.scatter, point_size=args.point_size,
+                  cmap=args.cmap, log=args.log, scatter=args.scatter,
+                  point_size=args.point_size,
                   n_contours=args.contours, contour_color=args.contour_color)
 
     if args.all:
