@@ -54,15 +54,6 @@ struct TuplePlus
     }
 };
 
-struct Tuple2Plus
-{
-    using TT = thrust::tuple<double, double>;
-    HOST_DEVICE_FUN TT operator()(const TT& a, const TT& b) const
-    {
-        return thrust::make_tuple(get<0>(a) + get<0>(b), get<1>(a) + get<1>(b));
-    }
-};
-
 /*! @brief Functor to compute kinetic and internal energy and linear and angular momentum
  *
  * @tparam Tc   type of x,y,z coordinates
@@ -120,27 +111,28 @@ CONSERVED_Q_GPU(double, double, double, float);
 CONSERVED_Q_GPU(double, float, double, float);
 CONSERVED_Q_GPU(float, float, float, float);
 
-/*! @brief Functor to compute magnetic energy
- *
- * @tparam Tc   type of Bx,By,Bz
- * @tparam Th   type of hydro fields (div(B), h, kx, xm)
- *
- */
+//! @brief magnetic energy density |B|² * V for a single particle, V = xm/kx
 template<class Tc, class Th>
 struct EMag
 {
-    /*! @brief calculate magnetic field magnitude and divergence error for a single particle
-     *
-     * @param p   Tuple<Bx, By, Bz, div(B), h, xm, kx> with data for one particle
-     * @return    magnetic Energy, divergence of B error
-     */
-    HOST_DEVICE_FUN
-    thrust::tuple<double, double> operator()(const thrust::tuple<Tc, Tc, Tc, Th, Th, Th, Th>& p)
+    //! @param p   Tuple<Bx, By, Bz, xm, kx> with data for one particle
+    HOST_DEVICE_FUN double operator()(const thrust::tuple<Tc, Tc, Tc, Th, Th>& p)
     {
         const Vec3<double> B{get<0>(p), get<1>(p), get<2>(p)};
-        Tc                 magB2 = norm2(B);
-        Th                 vol   = get<5>(p) / get<6>(p);
-        return {magB2 * vol, abs(get<3>(p)) * get<4>(p) / sqrt(magB2)};
+        return norm2(B) * get<3>(p) / get<4>(p);
+    }
+};
+
+//! @brief per-particle div(B) error h*|div(B)|/|B|, guarded against zero field
+template<class Tc, class Th>
+struct DivBError
+{
+    //! @param p   Tuple<Bx, By, Bz, div(B), h> with data for one particle
+    HOST_DEVICE_FUN double operator()(const thrust::tuple<Tc, Tc, Tc, Th, Th>& p)
+    {
+        const Vec3<double> B{get<0>(p), get<1>(p), get<2>(p)};
+        auto               magB2 = norm2(B);
+        return magB2 > 0 ? abs(get<3>(p)) * get<4>(p) / sqrt(magB2) : 0.0;
     }
 };
 
@@ -149,17 +141,21 @@ std::tuple<double, double, double> magneticEnergyGpu(Tc mu_0, const Th* xm, cons
                                                      const Tc* Bx, const Tc* By, const Tc* Bz, size_t first,
                                                      size_t last)
 {
-    auto it1 = thrust::make_zip_iterator(
-        thrust::make_tuple(Bx + first, By + first, Bz + first, divB + first, h + first, xm + first, kx + first));
-    auto it2 = thrust::make_zip_iterator(
-        thrust::make_tuple(Bx + last, By + last, Bz + last, divB + last, h + last, xm + last, kx + last));
+    auto magIt1 = thrust::make_zip_iterator(
+        thrust::make_tuple(Bx + first, By + first, Bz + first, xm + first, kx + first));
+    auto magIt2 =
+        thrust::make_zip_iterator(thrust::make_tuple(Bx + last, By + last, Bz + last, xm + last, kx + last));
 
-    auto plus = Tuple2Plus{};
-    auto init = thrust::make_tuple<double>(0.0, 0.0);
+    auto errIt1 = thrust::make_zip_iterator(
+        thrust::make_tuple(Bx + first, By + first, Bz + first, divB + first, h + first));
+    auto errIt2 =
+        thrust::make_zip_iterator(thrust::make_tuple(Bx + last, By + last, Bz + last, divB + last, h + last));
 
-    //! apply EMom to each particle and reduce results into a single sum
-    auto [BMag, cumulativeDivBError] = thrust::transform_reduce(thrust::device, it1, it2, EMag<Tc, Tc>{}, init, plus);
-    auto localMaxDivBError           = thrust::reduce(thrust::device, divB + first, divB + last, Th(0), thrust::maximum<Th>{});
+    double BMag = thrust::transform_reduce(thrust::device, magIt1, magIt2, EMag<Tc, Th>{}, 0.0, thrust::plus<double>{});
+    double cumulativeDivBError =
+        thrust::transform_reduce(thrust::device, errIt1, errIt2, DivBError<Tc, Th>{}, 0.0, thrust::plus<double>{});
+    double localMaxDivBError =
+        thrust::transform_reduce(thrust::device, errIt1, errIt2, DivBError<Tc, Th>{}, 0.0, thrust::maximum<double>{});
 
     return {0.5 * BMag / mu_0, cumulativeDivBError, localMaxDivBError};
 }

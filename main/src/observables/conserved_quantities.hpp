@@ -109,14 +109,17 @@ auto localConservedQuantities(size_t startIndex, size_t endIndex, Dataset& d)
 template<class Dataset>
 auto localMagneticEnergy(size_t first, size_t last, const Dataset& simData)
 {
-    const auto* divB = simData.magneto.divB.data();
-    const auto* h    = simData.hydro.h.data();
-    const auto* kx   = simData.hydro.kx.data();
-    const auto* xm   = simData.hydro.xm.data();
-    const auto* Bx   = simData.magneto.Bx.data();
-    const auto* By   = simData.magneto.By.data();
-    const auto* Bz   = simData.magneto.Bz.data();
-    auto        mu_0 = simData.magneto.mu_0;
+    auto& md = simData.magneto;
+    auto& d  = simData.hydro;
+
+    const auto* divB = md.divB.data();
+    const auto* h    = d.h.data();
+    const auto* kx   = d.kx.data();
+    const auto* xm   = d.xm.data();
+    const auto* Bx   = md.Bx.data();
+    const auto* By   = md.By.data();
+    const auto* Bz   = md.Bz.data();
+    const auto  mu_0 = md.mu_0;
 
     double eMag                = 0.0;
     double cumulativeDivBError = 0.0;
@@ -127,13 +130,14 @@ auto localMagneticEnergy(size_t first, size_t last, const Dataset& simData)
         double Bsq = Bx[i] * Bx[i] + By[i] * By[i] + Bz[i] * Bz[i];
         // The volume of particle i is given as xm[i]/kx[i]
         eMag += Bsq * xm[i] / kx[i];
-        cumulativeDivBError += h[i] * abs(divB[i]) / sqrt(Bsq);
+        if (Bsq > 0) { cumulativeDivBError += h[i] * abs(divB[i]) / sqrt(Bsq); }
     }
 
 #pragma omp parallel for reduction(max : maxDivBError)
     for (size_t i = first; i < last; i++)
     {
-        double localDivBError = h[i] * abs(divB[i]) / sqrt(Bx[i] * Bx[i] + By[i] * By[i] + Bz[i] * Bz[i]);
+        double Bsq            = Bx[i] * Bx[i] + By[i] * By[i] + Bz[i] * Bz[i];
+        double localDivBError = Bsq > 0 ? h[i] * abs(divB[i]) / sqrt(Bsq) : 0.0;
         if (localDivBError > maxDivBError) { maxDivBError = localDivBError; }
     }
 
@@ -217,11 +221,6 @@ void computeConservedQuantities(size_t startIndex, size_t endIndex, Dataset& sim
     d.ecin           = globalQuantities[0];
     d.eint           = globalQuantities[1];
     d.egrav          = globalQuantities[2];
-    md.eMag          = globalQuantities[11];
-    md.meanDivBError = globalQuantities[12] / d.numParticlesGlobal;
-    md.maxDivBError  = globalMaxDivBErr;
-    d.etot           = d.ecin + d.eint + d.egrav + md.eMag;
-
     util::array<double, 3> globalLinmom{globalQuantities[3], globalQuantities[4], globalQuantities[5]};
     util::array<double, 3> globalAngmom{globalQuantities[6], globalQuantities[7], globalQuantities[8]};
     d.linmom                 = std::sqrt(norm2(globalLinmom));
@@ -229,6 +228,10 @@ void computeConservedQuantities(size_t startIndex, size_t endIndex, Dataset& sim
     d.totalNeighbors         = size_t(globalQuantities[9]);
     d.numParticlesGlobalPrev = d.numParticlesGlobal;
     d.numParticlesGlobal     = size_t(globalQuantities[10]);
+    md.eMag                  = globalQuantities[11];
+    md.meanDivBError         = globalQuantities[12] / d.numParticlesGlobal;
+    md.maxDivBError          = globalMaxDivBErr;
+    d.etot                   = d.ecin + d.eint + d.egrav + md.eMag;
 }
 
 } // namespace sphexa
