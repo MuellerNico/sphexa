@@ -156,4 +156,68 @@ public:
     [[nodiscard]] const InitSettings& constants() const override { return settings_; }
 };
 
+InitSettings TurbulenceMagnetoConstants()
+{
+    InitSettings ret = TurbulenceConstants();
+    ret["Bmag"]      = 0.3;
+    return ret;
+}
+
+//! @brief uniform mean magnetic field along z; zero rates and cleaning scalar
+template<class MagnetoData>
+void initTurbulenceMagnetoFields(MagnetoData& md, const std::map<std::string, double>& constants)
+{
+    constexpr bool gpu = cstone::HaveGpu<typename MagnetoData::AcceleratorType>{};
+    using T            = typename MagnetoData::RealType;
+    using HT           = typename MagnetoData::HydroType;
+    using XM           = typename MagnetoData::XM1Type;
+
+    auto Bmag = constants.at("Bmag");
+
+    cstone::fill<gpu>(md.Bx.begin(), md.Bx.end(), T(0.0));
+    cstone::fill<gpu>(md.By.begin(), md.By.end(), T(0.0));
+    cstone::fill<gpu>(md.Bz.begin(), md.Bz.end(), T(Bmag));
+
+    cstone::fill<gpu>(md.dBx.begin(), md.dBx.end(), T(0.0));
+    cstone::fill<gpu>(md.dBy.begin(), md.dBy.end(), T(0.0));
+    cstone::fill<gpu>(md.dBz.begin(), md.dBz.end(), T(0.0));
+    cstone::fill<gpu>(md.dBx_m1.begin(), md.dBx_m1.end(), XM(0.0));
+    cstone::fill<gpu>(md.dBy_m1.begin(), md.dBy_m1.end(), XM(0.0));
+    cstone::fill<gpu>(md.dBz_m1.begin(), md.dBz_m1.end(), XM(0.0));
+
+    cstone::fill<gpu>(md.psi_ch.begin(), md.psi_ch.end(), HT(0.0));
+    cstone::fill<gpu>(md.d_psi_ch.begin(), md.d_psi_ch.end(), HT(0.0));
+    cstone::fill<gpu>(md.d_psi_ch_m1.begin(), md.d_psi_ch_m1.end(), XM(0.0));
+}
+
+template<class Dataset>
+class TurbulenceMagneto : public TurbulenceGlass<Dataset>
+{
+    mutable InitSettings settings_;
+
+public:
+    TurbulenceMagneto(std::string initBlock, std::string settingsFile, IFileReader* reader)
+        : TurbulenceGlass<Dataset>(std::move(initBlock), settingsFile, reader)
+    {
+        Dataset d;
+        settings_ = buildSettings(d, TurbulenceMagnetoConstants(), settingsFile, reader);
+    }
+
+    cstone::Box<typename Dataset::RealType> init(int rank, int numRanks, size_t cbrtNumPart, Dataset& simData,
+                                                 IFileReader* reader) const override
+    {
+        auto  box = TurbulenceGlass<Dataset>::init(rank, numRanks, cbrtNumPart, simData, reader);
+        auto& md  = simData.magneto;
+        md.resize(simData.hydro.x.size());
+        initTurbulenceMagnetoFields(md, settings_);
+
+        settings_["numParticlesGlobal"] = double(simData.hydro.numParticlesGlobal);
+        BuiltinWriter attributeSetter(settings_);
+        simData.hydro.loadOrStoreAttributes(&attributeSetter);
+        return box;
+    }
+
+    [[nodiscard]] const InitSettings& constants() const override { return settings_; }
+};
+
 } // namespace sphexa

@@ -144,6 +144,13 @@ SimInitializers<Dataset>::makeTurbulence(std::string glassBlock, std::string set
 
 template<class Dataset>
 std::unique_ptr<ISimInitializer<Dataset>>
+SimInitializers<Dataset>::makeTurbulenceMagneto(std::string glassBlock, std::string settingsFile, IFileReader* reader)
+{
+    return std::make_unique<TurbulenceMagneto<Dataset>>(glassBlock, settingsFile, reader);
+}
+
+template<class Dataset>
+std::unique_ptr<ISimInitializer<Dataset>>
 SimInitializers<Dataset>::makeWindShock(std::string glassBlock, std::string settingsFile, IFileReader* reader)
 {
     return std::make_unique<WindShockGlass<Dataset>>(glassBlock, settingsFile, reader);

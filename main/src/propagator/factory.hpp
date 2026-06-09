@@ -68,6 +68,10 @@ propagatorFactory(const std::string& choice, bool avClean, std::ostream& output,
     {
         return PropLib<DomainType, ParticleDataType>::makeMagnetoHydroProp(output, rank, s, avClean);
     }
+    if (choice == "magneto-turbulence")
+    {
+        return PropLib<DomainType, ParticleDataType>::makeMagnetoTurbProp(output, rank, s, avClean);
+    }
 #ifdef SPH_EXA_HAVE_DISKS
     if (choice == "std-disk") { return PropLib<DomainType, ParticleDataType>::makeDiskProp(output, rank, s); }
     if (choice == "std-relax") { return PropLib<DomainType, ParticleDataType>::makeRelaxProp(output, rank, s); }
