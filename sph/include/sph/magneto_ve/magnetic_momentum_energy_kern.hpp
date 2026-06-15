@@ -116,10 +116,10 @@ HOST_DEVICE_FUN inline void magneticMomentumJLoop(
     T H       = 0.;
     // if (beta < 1) { H = 2.; } //SPHYNX
     // else if (beta <= 2) { H = 2 * (2. - beta); }
-    if (beta < 2.) { H = 1.; } // PHANTOM
-    else if (beta < 10.) { H = (10. - beta) / 8.; }
-    // if (beta < 1.) { H = 1.; } //Wissing et al.
-    // else if (beta < 2.) { H = 2. - beta; }
+    // if (beta < 2.) { H = 1.; } // PHANTOM
+    // else if (beta < 10.) { H = (10. - beta) / 8.; }
+    if (beta < 1.) { H = 1.; } //Wissing et al.
+    else if (beta < 2.) { H = 2. - beta; }
 
     T f_i = 0.0;
 
