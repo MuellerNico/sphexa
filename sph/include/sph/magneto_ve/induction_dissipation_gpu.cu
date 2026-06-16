@@ -119,6 +119,8 @@ void computeInductionAndDissipationGpu(const GroupView& grp, HydroData& d, Magne
         rawPtr(d.du), rawPtr(m.alpha_B), rawPtr(m.d_psi_ch), rawPtr(m.dBxdx), rawPtr(m.dBxdy), rawPtr(m.dBxdz),
         rawPtr(m.dBydx), rawPtr(m.dBydy), rawPtr(m.dBydz), rawPtr(m.dBzdx), rawPtr(m.dBzdy), rawPtr(m.dBzdz),
         m.resistivityScheme, nidxPool, traversalPool);
+
+    checkGpuErrors(cudaDeviceSynchronize());
 }
 
 template void computeInductionAndDissipationGpu(const GroupView& grp, sphexa::ParticlesData<cstone::GpuTag>& d,

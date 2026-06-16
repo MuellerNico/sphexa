@@ -168,7 +168,7 @@ public:
         acquire(d, "divv", "curlv");
         sph::magneto::computeIadFullDivvCurlv(groups_.view(), simData, domain.box());
         d.minDtRho = rhoTimestep(first, last, d);
-        timer.step("IadVelocityDivCurlGradh");
+        timer.step("IadDivCurlGradh");
 
         computeEOS(first, last, d);
         timer.step("EquationOfState");
@@ -188,7 +188,7 @@ public:
         release(d, "divv", "curlv");
         acquire(d, "ay", "az");
         sph::magneto::computeMomentumEnergy<avClean>(groups_.view(), nullptr, simData, domain.box());
-        timer.step("MomentumAndEnergy");
+        timer.step("MagneticMomentumAndEnergy");
 
         domain.exchangeHalos(get<"divB", "curlB_x", "curlB_y", "curlB_z", "psi_ch", "alpha_B", "dBxdx", "dBxdy",
                                  "dBxdz", "dBydx", "dBydy", "dBydz", "dBzdx", "dBzdy", "dBzdz">(md),
