@@ -123,7 +123,7 @@ magneticMomentumGpu(Tc K, Tc Kcour, T Atmin, T Atmax, T ramp, unsigned ngmax, co
     __shared__ typename BlockReduce::TempStorage        temp_storage;
 
     BlockReduce reduce(temp_storage);
-    T           blockMin = reduce.Reduce(dt_i, cub::Min());
+    T           blockMin = reduce.Reduce(dt_i, thrust::minimum<>{});
     __syncthreads();
 
     if (threadIdx.x == 0) { cstone::atomicMinFloat(&minDt_ve_device, blockMin); }
