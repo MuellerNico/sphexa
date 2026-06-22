@@ -48,8 +48,12 @@ def plot_constants(fname, show=False, kind="turb"):
     extra_label = EXTRA_LABELS.get(kind, "extra (col 12)")
     has_extra = "extra" in d
     n_panels = 7 if has_extra else 6
-    fig, axes = plt.subplots(n_panels, 1, figsize=(10, 19 + (3 if has_extra else 0)), sharex=True)
-    fig.subplots_adjust(hspace=0.08, top=0.93, bottom=0.05, left=0.12, right=0.97)
+
+    ncols = 2
+    nrows = (n_panels + ncols - 1) // ncols
+    fig, axes = plt.subplots(nrows, ncols, figsize=(14, 3.3 * nrows + 1), sharex=True)
+    ax_list = axes.flatten()
+    fig.subplots_adjust(hspace=0.12, wspace=0.22, top=0.92, bottom=0.07, left=0.08, right=0.97)
 
     fig.suptitle(
         f"Simulation diagnostics — {os.path.basename(os.path.dirname(os.path.abspath(fname)))}",
@@ -61,7 +65,7 @@ def plot_constants(fname, show=False, kind="turb"):
     )
 
     # --- Panel 1: Energy components (log scale) ---
-    ax = axes[0]
+    ax = ax_list[0]
     ax.set_ylabel("Energy (log)")
     ax.set_yscale("log")
 
@@ -88,7 +92,7 @@ def plot_constants(fname, show=False, kind="turb"):
     ax.grid(True, which="both", alpha=0.3)
 
     # --- Panel 2: Relative energy drift ---
-    ax = axes[1]
+    ax = ax_list[1]
     ax.set_ylabel("(etot - etot₀) / |etot₀|")
     etot = d["etot"]
     etot0 = etot[0]
@@ -99,7 +103,7 @@ def plot_constants(fname, show=False, kind="turb"):
     ax.grid(True, alpha=0.3)
 
     # --- Panel 3: Momentum conservation ---
-    ax = axes[2]
+    ax = ax_list[2]
     ax.set_ylabel("Momentum")
     ax.plot(it, d["linmom"], label="linmom", linewidth=1.2)
     ax.plot(it, d["angmom"], label="angmom", linewidth=1.2, linestyle="--")
@@ -107,18 +111,17 @@ def plot_constants(fname, show=False, kind="turb"):
     ax.legend(fontsize=8, loc="upper right")
     ax.grid(True, alpha=0.3)
 
-    # --- Panel 4: Magnetic energy (log scale) ---
-    ax = axes[3]
-    ax.set_ylabel("eMag (log)")
-    ax.set_yscale("log")
-    eMag = d["eMag"]
+    # --- Panel 4: Magnetic energy ---
+    ax = ax_list[3]
+    ax.set_ylabel("eMag / eMag₀")
+    eMag = d["eMag"] / d["eMag"][0] 
     pos = eMag > 0
     if pos.any():
         ax.plot(it[pos], eMag[pos], color="tab:purple", linewidth=1.2)
     ax.grid(True, which="both", alpha=0.3)
 
     # --- Panel 5: div(B) errors (log scale) ---
-    ax = axes[4]
+    ax = ax_list[4]
     ax.set_ylabel("div(B) error (log)")
     ax.set_yscale("log")
     mean_b = d["meanDivBError"]
@@ -133,20 +136,28 @@ def plot_constants(fname, show=False, kind="turb"):
     ax.grid(True, which="both", alpha=0.3)
 
     # --- Panel 6: Minimum timestep ---
-    ax = axes[5]
+    ax = ax_list[5]
     ax.set_ylabel("minDt")
-    if not has_extra:
-        ax.set_xlabel("Iteration")
     ax.plot(it, d["minDt"], color="tab:green", linewidth=1.2)
     ax.grid(True, alpha=0.3)
 
     # --- Panel 7: test-specific scalar (turbulence RMS Mach number, or magnetic KH growth rate) ---
     if has_extra:
-        ax = axes[6]
+        ax = ax_list[6]
         ax.set_ylabel(extra_label)
-        ax.set_xlabel("Iteration")
         ax.plot(it, d["extra"], color="tab:orange", linewidth=1.2)
         ax.grid(True, alpha=0.3)
+
+    for ax in ax_list[n_panels:]:
+        ax.set_visible(False)
+
+    # with sharex, only the global bottom row shows tick labels; re-enable them on
+    # the lowest populated panel of each column (the short column ends one row early)
+    for col in range(ncols):
+        col_idx = [r * ncols + col for r in range(nrows) if r * ncols + col < n_panels]
+        bottom = ax_list[col_idx[-1]]
+        bottom.set_xlabel("Iteration")
+        bottom.tick_params(labelbottom=True)
 
     outdir = os.path.dirname(os.path.abspath(fname))
     outname = os.path.join(outdir, "constants_diagnostics.pdf")
