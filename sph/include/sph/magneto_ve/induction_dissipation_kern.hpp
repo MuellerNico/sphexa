@@ -106,7 +106,6 @@ inductionAndDissipationJLoop(cstone::LocalIndex i, Tc K, Tc mu_0, const cstone::
         auto mj     = m[j];
         auto xmassj = xm[j];
         auto rhoj   = kx[j] * mj / xmassj;
-        auto volj   = xmassj / (kx[j] * gradh[j] * gradhi);
 
         T rx = xi - x[j];
         T ry = yi - y[j];
@@ -146,14 +145,9 @@ inductionAndDissipationJLoop(cstone::LocalIndex i, Tc K, Tc mu_0, const cstone::
         T termA2_j = -(c12j * rx + c22j * ry + c23j * rz) * Wj;
         T termA3_j = -(c13j * rx + c23j * ry + c33j * rz) * Wj;
 
-        cstone::Vec3<Tc> termA_avg{termA1_i + termA1_j, termA2_i + termA2_j, termA3_i + termA3_j};
-        termA_avg *= 0.5;
-
         cstone::Vec3<T> vab_cross_rab{vy_ij * rz - vz_ij * ry, vz_ij * rx - vx_ij * rz, vx_ij * ry - vy_ij * rx};
         T               v_sigB = std::sqrt(norm2(vab_cross_rab) / r2);
         T alpha_B_avg = T(0.5) * (alpha_Bi + alpha_B[j]);
-
-        T resistivity_ab = T(0.5) * alpha_B_avg * v_sigB * dist;
 
         cstone::Vec3<Tc> B_ab{Bxi - Bx[j], Byi - By[j], Bzi - Bz[j]};
 
@@ -167,20 +161,27 @@ inductionAndDissipationJLoop(cstone::LocalIndex i, Tc K, Tc mu_0, const cstone::
                                             gradBx_j, gradBy_j, gradBz_j);
         }
 
-        // We have 2*resistivity_ab because we use symmetric resisitivity
-        // we divide by r^2 because we divide once to get the unit projector and again for the 1/r of the equation
-        dB_diss +=
-            volj * T(2) * resistivity_ab * B_ab * ((rx * termA_avg[0] + ry * termA_avg[1] + rz * termA_avg[2]) / r2);
+        // Conjugate-pair (non-symmetric) artificial resistivity (Price et al. 2018, eqs. 181-182)
+        T grkern_i = (rx * termA1_i + ry * termA2_i + rz * termA3_i) / dist;
+        T grkern_j = (rx * termA1_j + ry * termA2_j + rz * termA3_j) / dist;
 
-        // same comment as above, discretisation taken from Wissing and Shen (2020)
-        du_diss += volj * 2 * resistivity_ab * norm2(B_ab) *
-                   ((rx * termA_avg[0] + ry * termA_avg[1] + rz * termA_avg[2]) / r2);
+        auto diss_op = T(0.5) * alpha_B_avg * v_sigB * mj * rhoi *
+                       (grkern_i / (rhoi * rhoi) + grkern_j / (rhoj * rhoj));
+
+        dB_diss += diss_op * B_ab;
+        du_diss += diss_op * norm2(B_ab);
 
         // wave cleaning speed
         auto v_alfven2j  = (Bx[j] * Bx[j] + By[j] * By[j] + Bz[j] * Bz[j]) / (rhoj * mu_0);
         auto c_hj        = fclean * std::sqrt(c[j] * c[j] + v_alfven2j);
 
-        divB_clean += volj * (psi_ch_i * c_hi + psi_ch[j] * c_hj) * termA_avg;
+        // Conjugate-pair (non-symmetric) divergence cleaning (Price et al. 2018, eq. 172)
+        cstone::Vec3<Tc> termA_i_vec{termA1_i, termA2_i, termA3_i};
+        cstone::Vec3<Tc> termA_j_vec{termA1_j, termA2_j, termA3_j};
+
+        divB_clean += mj * rhoi *
+                      (psi_ch_i * c_hi / (gradhi * rhoi * rhoi) * termA_i_vec +
+                       psi_ch[j] * c_hj / (gradh[j] * rhoj * rhoj) * termA_j_vec);
     }
 
     dB_diss *= K;
