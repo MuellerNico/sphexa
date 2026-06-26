@@ -68,6 +68,7 @@ HOST_DEVICE_FUN inline void divB_curlB_JLoop(cstone::LocalIndex i, Tc K, const c
 
     // the 3 components of these vectors will be the derivatives in x,y,z directions
     cstone::Vec3<T> dBxi{0., 0., 0.}, dByi{0., 0., 0.}, dBzi{0., 0., 0.};
+    T               divBcons = 0; // conservative (energy-conjugate) divergence
 
     auto c11i = c11[i];
     auto c12i = c12[i];
@@ -106,10 +107,17 @@ HOST_DEVICE_FUN inline void divB_curlB_JLoop(cstone::LocalIndex i, Tc K, const c
         dBxi += (Bx_ji * xmassj) * termA;
         dByi += (By_ji * xmassj) * termA;
         dBzi += (Bz_ji * xmassj) * termA;
+
+        // self-volume-weighted (no xm[j]) divergence sum for the conservative divB below
+        divBcons += Bx_ji * termA[0] + By_ji * termA[1] + Bz_ji * termA[2];
     }
 
     T norm_kxi = K * hiInv3 / (kxi * gradh[i]);
-    divB[i]    = norm_kxi * (dBxi[0] + dByi[1] + dBzi[2]);
+
+    // Conservative (energy-conjugate) divergence for the constrained-cleaning psi source (exact
+    // transpose of grad-psi operator under magnetic-energy norm V = xm/kx). Uses the self volume 
+    // element xm[i] and drops the 1/kx. Assumes equal particle masses.
+    divB[i] = K * hiInv3 * xm[i] / gradh[i] * divBcons;
 
     curlB_x[i] = norm_kxi * (dBzi[1] - dByi[2]);
     curlB_y[i] = norm_kxi * (dBxi[2] - dBzi[0]);

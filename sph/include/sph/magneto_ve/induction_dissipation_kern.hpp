@@ -175,13 +175,14 @@ inductionAndDissipationJLoop(cstone::LocalIndex i, Tc K, Tc mu_0, const cstone::
         auto v_alfven2j  = (Bx[j] * Bx[j] + By[j] * By[j] + Bz[j] * Bz[j]) / (rhoj * mu_0);
         auto c_hj        = fclean * std::sqrt(c[j] * c[j] + v_alfven2j);
 
-        // Conjugate-pair (non-symmetric) divergence cleaning (Price et al. 2018, eq. 172)
+        // Non-symmetric constrained divB cleaning (Price et al. 2018, eq. 172)
+        // VE-native conservative grad-psi: Lagrangian conjugate of the conservative divB
         cstone::Vec3<Tc> termA_i_vec{termA1_i, termA2_i, termA3_i};
         cstone::Vec3<Tc> termA_j_vec{termA1_j, termA2_j, termA3_j};
 
-        divB_clean += mj * rhoi *
-                      (psi_ch_i * c_hi / (gradhi * rhoi * rhoi) * termA_i_vec +
-                       psi_ch[j] * c_hj / (gradh[j] * rhoj * rhoj) * termA_j_vec);
+        divB_clean += rhoi * mj *
+                      (psi_ch_i * c_hi * xmassi * xmassi / (kxi * mi * mi * gradhi) * termA_i_vec +
+                       psi_ch[j] * c_hj * xmassj * xmassj / (kx[j] * mj * mj * gradh[j]) * termA_j_vec);
     }
 
     dB_diss *= K;
