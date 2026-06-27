@@ -33,7 +33,7 @@
 
 #include <algorithm>
 #include <cmath>
-#include <vector>
+#include <limits>
 #include <mpi.h>
 
 #include "cstone/primitives/math.hpp"
@@ -99,7 +99,7 @@ auto computeMinTimestep(float* groupDt, LocalIndex* groupIndices, LocalIndex num
                         AccVec& scratch)
 {
     float                fastFraction = 0.4;
-    std::array<float, 2> minGroupDt;
+    std::array<float, 2> minGroupDt   = {std::numeric_limits<float>::max(), std::numeric_limits<float>::max()};
     if constexpr (IsDeviceVector<AccVec>{})
     {
         sortGroupDt(groupDt, groupIndices, numGroups, scratch);

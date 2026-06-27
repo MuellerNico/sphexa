@@ -426,16 +426,16 @@ public:
 private:
     int64_t stepAttributeIndex(const std::string& key)
     {
-        auto    attributes = fileutils::stepAttributeNames(h5File_);
-        int64_t attrIndex  = std::find(attributes.begin(), attributes.end(), key) - attributes.begin();
+        auto        attributes = fileutils::stepAttributeNames(h5File_);
+        std::size_t attrIndex  = std::find(attributes.begin(), attributes.end(), key) - attributes.begin();
         if (attrIndex == attributes.size()) { throw std::out_of_range("Attribute " + key + " does not exist\n"); }
         return attrIndex;
     }
 
     int64_t fileAttributeIndex(const std::string& key)
     {
-        auto    attributes = fileutils::fileAttributeNames(h5File_);
-        int64_t attrIndex  = std::find(attributes.begin(), attributes.end(), key) - attributes.begin();
+        auto        attributes = fileutils::fileAttributeNames(h5File_);
+        std::size_t attrIndex  = std::find(attributes.begin(), attributes.end(), key) - attributes.begin();
         if (attrIndex == attributes.size()) { throw std::out_of_range("Attribute " + key + " does not exist\n"); }
         return attrIndex;
     }

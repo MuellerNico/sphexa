@@ -106,6 +106,7 @@ public:
     explicit RadialProfile(std::string initBlock, const InitSettings& testCaseSettings, std::string settingsFile,
                            IFileReader* reader)
         : glassBlock_(std::move(initBlock))
+        , ISimInitializer<Dataset>(settingsFile)
     {
         Dataset d;
         settings_ = buildSettings(d, testCaseSettings, settingsFile, reader);
@@ -138,6 +139,8 @@ public:
     }
 
     [[nodiscard]] const InitSettings& constants() const override { return settings_; }
+
+    using ISimInitializer<Dataset>::init; // just to avoid compiler warnings about hidden init
 };
 
 } // namespace sphexa
