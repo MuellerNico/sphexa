@@ -66,27 +66,33 @@ PropLib<DomainType, ParticleDataType>::makeTurbVeProp(std::ostream& output, size
 template<class DomainType, class ParticleDataType>
 std::unique_ptr<Propagator<DomainType, ParticleDataType>>
 PropLib<DomainType, ParticleDataType>::makeMagnetoHydroProp(std::ostream& output, size_t rank,
-                                                            const InitSettings& settings, bool avClean)
+                                                            const InitSettings& settings, bool SLR, bool AVswitches)
 {
-    if (avClean)
+    if (SLR)
     {
-        return std::make_unique<magneto::MagnetoHydroProp<true, DomainType, ParticleDataType>>(output, rank);
+        return std::make_unique<magneto::MagnetoHydroProp<true, DomainType, ParticleDataType>>(output, rank, AVswitches);
     }
-    else { return std::make_unique<magneto::MagnetoHydroProp<false, DomainType, ParticleDataType>>(output, rank); }
+    else
+    {
+        return std::make_unique<magneto::MagnetoHydroProp<false, DomainType, ParticleDataType>>(output, rank,
+                                                                                                AVswitches);
+    }
 }
 
 template<class DomainType, class ParticleDataType>
 std::unique_ptr<Propagator<DomainType, ParticleDataType>>
 PropLib<DomainType, ParticleDataType>::makeMagnetoTurbProp(std::ostream& output, size_t rank,
-                                                           const InitSettings& settings, bool avClean)
+                                                           const InitSettings& settings, bool SLR, bool AVswitches)
 {
-    if (avClean)
+    if (SLR)
     {
-        return std::make_unique<magneto::MagnetoTurbProp<true, DomainType, ParticleDataType>>(output, rank, settings);
+        return std::make_unique<magneto::MagnetoTurbProp<true, DomainType, ParticleDataType>>(output, rank, settings,
+                                                                                              AVswitches);
     }
     else
     {
-        return std::make_unique<magneto::MagnetoTurbProp<false, DomainType, ParticleDataType>>(output, rank, settings);
+        return std::make_unique<magneto::MagnetoTurbProp<false, DomainType, ParticleDataType>>(output, rank, settings,
+                                                                                               AVswitches);
     }
 }
 

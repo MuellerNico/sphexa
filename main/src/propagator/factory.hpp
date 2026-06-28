@@ -70,11 +70,11 @@ propagatorFactory(const std::string& choice, bool SLR, bool AVswitches, std::ost
     }
     if (choice == "magneto-ve")
     {
-        return PropLib<DomainType, ParticleDataType>::makeMagnetoHydroProp(output, rank, s, avClean);
+        return PropLib<DomainType, ParticleDataType>::makeMagnetoHydroProp(output, rank, s, SLR, AVswitches);
     }
     if (choice == "magneto-turb-ve")
     {
-        return PropLib<DomainType, ParticleDataType>::makeMagnetoTurbProp(output, rank, s, avClean);
+        return PropLib<DomainType, ParticleDataType>::makeMagnetoTurbProp(output, rank, s, SLR, AVswitches);
     }
 #ifdef SPH_EXA_HAVE_DISKS
     if (choice == "std-disk") { return PropLib<DomainType, ParticleDataType>::makeDiskProp(output, rank, s); }

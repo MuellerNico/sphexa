@@ -36,7 +36,7 @@
 namespace sph::magneto
 {
 
-template<bool avClean, class T, class SimData>
+template<bool SLR, class T, class SimData>
 void computeMomentumEnergy(const GroupView& grp, float* groupDt, SimData& sim, const cstone::Box<T>& box)
 {
     auto& d  = sim.hydro;
@@ -44,17 +44,18 @@ void computeMomentumEnergy(const GroupView& grp, float* groupDt, SimData& sim, c
 
     if constexpr (cstone::HaveGpu<typename SimData::AcceleratorType>{})
     {
-        cuda::computeMagneticMomentumEnergy<avClean>(grp, groupDt, d, md, box);
+        cuda::computeMagneticMomentumEnergy<SLR>(grp, groupDt, d, md, box);
     }
     else
     {
-        magneticMomentumAndEnergyIjLoop<avClean>(
+        magneticMomentumAndEnergyIjLoop<SLR>(
             d.neighborhood, d.K, d.Kcour, md.mu_0, md.alpha_u, d.Atmin, d.Atmax, d.ramp, d.vx.data(), d.vy.data(),
             d.vz.data(), d.m.data(), d.c.data(), d.u.data(), d.kx.data(), d.alpha.data(), d.xm.data(), d.p.data(),
             d.gradh.data(), d.c11.data(), d.c12.data(), d.c13.data(), d.c22.data(), d.c23.data(), d.c33.data(),
             d.nc.data(), md.Bx.data(), md.By.data(), md.Bz.data(), md.dvxdx.data(), md.dvxdy.data(), md.dvxdz.data(),
             md.dvydx.data(), md.dvydy.data(), md.dvydz.data(), md.dvzdx.data(), md.dvzdy.data(), md.dvzdz.data(),
-            d.tdpdTrho.data(), d.wh.data(), d.du.data(), d.ax.data(), d.ay.data(), d.az.data(), d.dtCourant.data());
+            d.tdpdTrho.data(), d.wh.data(), d.avFloor, d.du.data(), d.ax.data(), d.ay.data(), d.az.data(),
+            d.divv.data(), d.curlv.data(), d.dtCourant.data());
 
         auto minDt = std::numeric_limits<typename SimData::HydroType>::infinity();
 #pragma omp parallel for reduction(min : minDt)

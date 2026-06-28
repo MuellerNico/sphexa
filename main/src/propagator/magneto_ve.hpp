@@ -45,7 +45,7 @@ namespace sphexa::magneto
 using namespace sph;
 using util::FieldList;
 
-template<bool avClean, class DomainType, class DataType>
+template<bool SLR, class DomainType, class DataType>
 class MagnetoHydroProp : public Propagator<DomainType, DataType>
 {
 protected:
@@ -65,6 +65,7 @@ protected:
 
     MHolder_t      mHolder_;
     GroupData<Acc> groups_;
+    bool           AVswitches_;
 
     /*! @brief the list of conserved particles fields with values preserved between iterations
      *
@@ -76,17 +77,19 @@ protected:
 
     //! @brief list of dependent fields, these may be used as scratch space during domain sync
     using DependentFieldsHydro = FieldList<"ax", "ay", "az", "prho", "c", "p", "u", "du", "c11", "c12", "c13", "c22",
-                                           "c23", "c33", "xm", "kx", "nc", "gradh", "dtCourant">;
+                                           "c23", "c33", "xm", "kx", "nc", "divv", "curlv", "gradh", "dtCourant">;
     using DependentFieldsMagneto =
         FieldList<"dvxdx", "dvxdy", " dvxdz", "dvydx", "dvydy", "dvydz", "dvzdx", "dvzdy", "dvzdz", "divB", "curlB_x",
                   "curlB_y", "curlB_z", "gradB_norm", "alpha_B", "dBxdx", "dBxdy", "dBxdz", "dBydx", "dBydy", "dBydz",
                   "dBzdx", "dBzdy", "dBzdz">;
 
 public:
-    MagnetoHydroProp(std::ostream& output, size_t rank)
+    MagnetoHydroProp(std::ostream& output, size_t rank, bool AVswitches)
         : Base(output, rank)
+        , AVswitches_(AVswitches)
     {
-        if (avClean && rank == 0) { std::cout << "AV cleaning is activated" << std::endl; }
+        if (SLR && rank == 0) { std::cout << "SLR is activated" << std::endl; }
+        if (AVswitches_ && rank == 0) { std::cout << "AV switches are activated" << std::endl; }
     }
 
     std::vector<std::string> conservedFields() const override
@@ -164,8 +167,6 @@ public:
         domain.exchangeHalos(get<"Bx", "By", "Bz">(md), get<"ax">(d), get<"keys">(d));
         timer.step("mpi::synchronizeHalos");
 
-        release(d, "az", "ay");
-        acquire(d, "divv", "curlv");
         sph::magneto::computeIadFullDivvCurlv(groups_.view(), simData, domain.box());
         d.minDtRho = rhoTimestep(first, last, d);
         timer.step("IadDivCurlGradh");
@@ -177,17 +178,18 @@ public:
                              get<"keys">(d));
         timer.step("mpi::synchronizeHalos");
 
-        computeAVswitches(groups_.view(), d, domain.box());
-        timer.step("AVswitches");
+        if (AVswitches_)
+        {
+            computeAVswitches(groups_.view(), d, domain.box());
+            timer.step("AVswitches");
+        }
 
         domain.exchangeHalos(get<"alpha", "gradh", "p", "u">(d), get<"ax">(d), get<"keys">(d));
         domain.exchangeHalos(get<"dvxdx", "dvxdy", " dvxdz", "dvydx", "dvydy", "dvydz", "dvzdx", "dvzdy", "dvzdz">(md),
                              get<"ax">(d), get<"keys">(d));
         timer.step("mpi::synchronizeHalos");
 
-        release(d, "divv", "curlv");
-        acquire(d, "ay", "az");
-        sph::magneto::computeMomentumEnergy<avClean>(groups_.view(), nullptr, simData, domain.box());
+        sph::magneto::computeMomentumEnergy<SLR>(groups_.view(), nullptr, simData, domain.box());
         timer.step("MagneticMomentumAndEnergy");
 
         domain.exchangeHalos(get<"divB", "curlB_x", "curlB_y", "curlB_z", "psi_ch", "alpha_B", "dBxdx", "dBxdy",

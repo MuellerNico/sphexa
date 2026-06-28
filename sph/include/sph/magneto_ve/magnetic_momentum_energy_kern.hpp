@@ -40,11 +40,11 @@
 namespace sph::magneto
 {
 
-template<bool avClean, class T>
+template<bool SLR, class T>
 struct MagneticMomentumAndEnergyInteraction
 {
     const T* wh;
-    T        mu_0, alpha_u, Atmin, Atmax, ramp;
+    T        mu_0, alpha_u, Atmin, Atmax, ramp, avFloor;
 
     template<class ParticleData, class Tc>
     constexpr auto operator()(const ParticleData& iData, const ParticleData& jData, cstone::Vec3<Tc> const& r_ij,
@@ -52,10 +52,10 @@ struct MagneticMomentumAndEnergyInteraction
     {
         const auto [i, iPos, hi, vxi, vyi, vzi, mi, ci, ui, kxi, alpha_i, xmassi, pi, gradhi, c11i, c12i, c13i, c22i,
                     c23i, c33i, nci, Bxi, Byi, Bzi, dvxdxi, dvxdyi, dvxdzi, dvydxi, dvydyi, dvydzi, dvzdxi, dvzdyi,
-                    dvzdzi, tdpdTrhoi] = iData;
+                    dvzdzi, tdpdTrhoi, divvi, curlvi] = iData;
         const auto [j, jPos, hj, vxj, vyj, vzj, mj, cj, uj, kxj, alpha_j, xmassj, pj, gradhj, c11j, c12j, c13j, c22j,
                     c23j, c33j, ncj, Bxj, Byj, Bzj, dvxdxj, dvxdyj, dvxdzj, dvydxj, dvydyj, dvydzj, dvzdxj, dvzdyj,
-                    dvzdzj, tdpdTrhoj] = jData;
+                    dvzdzj, tdpdTrhoj, divvj, curlvj] = jData;
 
         T mu_0Inv = T(1) / mu_0;
 
@@ -80,7 +80,7 @@ struct MagneticMomentumAndEnergyInteraction
         T magneticVsignali = std::sqrt(ci * ci + v_alfven2i);
 
         [[maybe_unused]] util::array<T, 6> gradV_i;
-        if constexpr (avClean)
+        if constexpr (SLR)
         {
             gradV_i = {dvxdxi, dvxdyi + dvydxi, dvxdzi + dvzdxi, dvydyi, dvydzi + dvzdyi, dvzdzi};
         }
@@ -121,23 +121,36 @@ struct MagneticMomentumAndEnergyInteraction
         auto proj = pj / (kxj * mj * mj * gradhj);
         auto volj = xmassj / kxj;
 
-        T rv = rx * vx_ij + ry * vy_ij + rz * vz_ij;
-        if constexpr (avClean)
+        T rv     = rx * vx_ij + ry * vy_ij + rz * vz_ij;
+        T rv_slr = rv;
+        T Lij    = T(1);
+
+        if constexpr (SLR)
         {
-            rv += avRvCorrection({rx, ry, rz}, stl::min(v1, v2), eta_crit, gradV_i,
-                                 {dvxdxj, dvxdyj + dvydxj, dvxdzj + dvzdxj, dvydyj, dvydzj + dvzdyj, dvzdzj});
+            T eps_i   = T(1e-4) * ci * hiInv;
+            T eps_j   = T(1e-4) * cj * hjInv;
+            T denom_i = std::abs(divvi) + std::abs(curlvi) + eps_i;
+            T denom_j = std::abs(divvj) + std::abs(curlvj) + eps_j;
+            T f_i     = (denom_i > T(0)) ? std::abs(divvi) / denom_i : T(0); // per-particle Balsara modulators
+            T f_j     = (denom_j > T(0)) ? std::abs(divvj) / denom_j : T(0);
+            Lij       = stl::max(avFloor, T(0.5) * (f_i + f_j));
+            T balsi   = T(1) - f_i * f_i;
+            T balsj   = T(1) - f_j * f_j;
+            rv_slr += avRvCorrection({rx, ry, rz}, stl::min(v1, v2), eta_crit, balsi, balsj, gradV_i,
+                                     {dvxdxj, dvxdyj + dvydxj, dvxdzj + dvzdxj, dvydyj, dvydzj + dvzdyj, dvzdzj});
         }
 
         T v_alfven2j       = (Bxj * Bxj + Byj * Byj + Bzj * Bzj) / (rhoj * mu_0);
         T magneticVsignalj = std::sqrt(cj * cj + v_alfven2j);
 
         T wij             = rv * distInv;
+        T wij_slr         = rv_slr * distInv;
         T delta_u         = ui - uj;
-        T viscosity_ij    = artificial_viscosity(alpha_i, alpha_j, magneticVsignali, magneticVsignalj, wij);
+        T viscosity_ij = artificial_viscosity(alpha_i, alpha_j, magneticVsignali, magneticVsignalj, wij_slr, wij_slr, Lij);
         T heat_conduction = AV_heat_conduction(T(alpha_u), wij, rhoi, rhoj, proi, proj, delta_u);
 
         // For time-step calculations
-        T vijsignal = (i == j) ? T(0) : T(0.5) * (magneticVsignali + magneticVsignalj) - T(2) * wij;
+        T vijsignal = (i == j) ? T(0) : T(0.5) * (magneticVsignali + magneticVsignalj) - T(2) * wij_slr;
 
         T a_mom, b_mom;
         T Atwood = (std::abs(rhoi - rhoj)) / (rhoi + rhoj);
@@ -227,7 +240,7 @@ struct MagneticMomentumAndEnergyPostamble
     {
         const auto [i, iPos, hi, vxi, vyi, vzi, mi, ci, ui, kxi, alpha_i, xmassi, pi, gradhi, c11i, c12i, c13i, c22i,
                     c23i, c33i, nci, Bxi, Byi, Bzi, dvxdxi, dvxdyi, dvxdzi, dvydxi, dvydyi, dvydzi, dvzdxi, dvzdyi,
-                    dvzdzi, tdpdTrhoi] = iData;
+                    dvzdzi, tdpdTrhoi, divvi, curlvi] = iData;
         auto [a_visc_energy, a_heat_cond, energy, momentum_x, momentum_y, momentum_z, f_i, maxvsignal] = result;
 
         T  mu_0Inv    = T(1) / mu_0;
@@ -272,7 +285,7 @@ struct MagneticMomentumAndEnergyPostambleWithDt : MagneticMomentumAndEnergyPosta
             MagneticMomentumAndEnergyPostamble<UseTdpdTrho, T, Tc>::operator()(iData, result);
         const auto [i, iPos, hi, vxi, vyi, vzi, mi, ci, ui, kxi, alpha_i, xmassi, pi, gradhi, c11i, c12i, c13i, c22i,
                     c23i, c33i, nci, Bxi, Byi, Bzi, dvxdxi, dvxdyi, dvxdzi, dvydxi, dvydyi, dvydzi, dvzdxi, dvzdyi,
-                    dvzdzi, tdpdTrhoi] = iData;
+                    dvzdzi, tdpdTrhoi, divvi, curlvi] = iData;
 
         auto rhoi             = kxi * mi / xmassi;
         T    v_alfven2        = (Bxi * Bxi + Byi * Byi + Bzi * Bzi) / (this->mu_0 * rhoi);
