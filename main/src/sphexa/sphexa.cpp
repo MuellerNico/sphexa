@@ -95,7 +95,7 @@ int main(int argc, char** argv)
     const size_t             problemSize  = parser.get("-n", 50);
     const std::string        glassBlock   = parser.get("--glass");
     const std::string        propChoice   = parser.get("--prop", std::string("ve"));
-    const std::string        resistivity  = parser.get("--resistivity", std::string("switch"));
+    const std::string        resistivity  = parser.get("--resistivity", std::string("SLR"));
     const double             conductivity = parser.get("--conductivity", 0.0);
     const std::string        maxStepStr   = parser.get("-s", std::string("200"));
     std::vector<std::string> writeExtra   = parser.getCommaList("--wextra");
