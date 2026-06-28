@@ -124,6 +124,7 @@ def plot_constants(fname, show=False, kind="turb"):
     ax = ax_list[4]
     ax.set_ylabel("div(B) error (log)")
     ax.set_yscale("log")
+    ax.set_ylim(bottom=1e-6, top=1e2)
     mean_b = d["meanDivBError"]
     max_b  = d["maxDivBError"]
     pos_mean = mean_b > 0
