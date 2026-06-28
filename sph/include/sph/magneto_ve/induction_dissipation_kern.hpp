@@ -84,21 +84,21 @@ struct InductionAndDissipationInteraction
         T Wi = hiInv3 * lt::lookup(wh, v1);
         T Wj = hjInv3 * lt::lookup(wh, v2);
 
-        T termA1_i = -(c11i * rx + c12i * ry + c13i * rz) * Wi;
-        T termA2_i = -(c12i * rx + c22i * ry + c23i * rz) * Wi;
-        T termA3_i = -(c13i * rx + c23i * ry + c33i * rz) * Wi;
+        cstone::Vec3<Tc> termAi;
+        termAi[0] = -(c11i * rx + c12i * ry + c13i * rz) * Wi;
+        termAi[1] = -(c12i * rx + c22i * ry + c23i * rz) * Wi;
+        termAi[2] = -(c13i * rx + c23i * ry + c33i * rz) * Wi;
 
-        T termA1_j = -(c11j * rx + c12j * ry + c13j * rz) * Wj;
-        T termA2_j = -(c12j * rx + c22j * ry + c23j * rz) * Wj;
-        T termA3_j = -(c13j * rx + c23j * ry + c33j * rz) * Wj;
+        cstone::Vec3<Tc> termAj;
+        termAj[0] = -(c11j * rx + c12j * ry + c13j * rz) * Wj;
+        termAj[1] = -(c12j * rx + c22j * ry + c23j * rz) * Wj;
+        termAj[2] = -(c13j * rx + c23j * ry + c33j * rz) * Wj;
+        
+        cstone::Vec3<Tc> v_ij          = {vxi - vxj, vyi - vyj, vzi - vzj};
+        cstone::Vec3<Tc> vab_cross_rab = cross(v_ij, r_ij);
 
-        T vx_ij = vxi - vxj;
-        T vy_ij = vyi - vyj;
-        T vz_ij = vzi - vzj;
-
-        cstone::Vec3<T> vab_cross_rab{vy_ij * rz - vz_ij * ry, vz_ij * rx - vx_ij * rz, vx_ij * ry - vy_ij * rx};
-        T               v_sigB      = (i == j) ? T(0) : std::sqrt(norm2(vab_cross_rab) / r2);
-        T               alpha_B_avg = T(0.5) * (alpha_Bi + alpha_Bj);
+        T v_sigB      = (i == j) ? T(0) : T(std::sqrt(norm2(vab_cross_rab) / r2));
+        T alpha_B_avg = T(0.5) * (alpha_Bi + alpha_Bj);
 
         cstone::Vec3<Tc> B_ab{Bxi - Bxj, Byi - Byj, Bzi - Bzj};
 
@@ -112,13 +112,13 @@ struct InductionAndDissipationInteraction
             cstone::Vec3<T> gradBx_j{dBxdxj, dBxdyj, dBxdzj};
             cstone::Vec3<T> gradBy_j{dBydxj, dBydyj, dBydzj};
             cstone::Vec3<T> gradBz_j{dBzdxj, dBzdyj, dBzdzj};
-            B_ab += mhdSLRCorrection<Tc, T>({rx, ry, rz}, eta_ab, eta_crit_i, T(1), T(1), gradBx_i, gradBy_i, gradBz_i,
+            B_ab += mhdSLRCorrection<Tc, T>(r_ij, eta_ab, eta_crit_i, T(1), T(1), gradBx_i, gradBy_i, gradBz_i,
                                             gradBx_j, gradBy_j, gradBz_j);
         }
 
         // Conjugate-pair (non-symmetric) artificial resistivity (Price et al. 2018, eqs. 181-182)
-        T grkern_i = (rx * termA1_i + ry * termA2_i + rz * termA3_i) * distInv;
-        T grkern_j = (rx * termA1_j + ry * termA2_j + rz * termA3_j) * distInv;
+        T grkern_i = dot(r_ij, termAi) * distInv;
+        T grkern_j = dot(r_ij, termAj) * distInv;
 
         T diss_op =
             T(0.5) * alpha_B_avg * v_sigB * mj * rhoi * (grkern_i / (rhoi * rhoi) + grkern_j / (rhoj * rhoj));
@@ -134,12 +134,9 @@ struct InductionAndDissipationInteraction
 
         // Non-symmetric constrained divB cleaning (Price et al. 2018, eq. 172)
         // VE-native conservative grad-psi: Lagrangian conjugate of the conservative divB
-        cstone::Vec3<Tc> termA_i_vec{termA1_i, termA2_i, termA3_i};
-        cstone::Vec3<Tc> termA_j_vec{termA1_j, termA2_j, termA3_j};
-
         cstone::Vec3<Tc> divB_clean = rhoi * mj *
-                                      (psi_ch_i * c_hi * xmassi * xmassi / (kxi * mi * mi * gradhi) * termA_i_vec +
-                                       psi_ch_j * c_hj * xmassj * xmassj / (kxj * mj * mj * gradhj) * termA_j_vec);
+                                      (psi_ch_i * c_hi * xmassi * xmassi / (kxi * mi * mi * gradhi) * termAi +
+                                       psi_ch_j * c_hj * xmassj * xmassj / (kxj * mj * mj * gradhj) * termAj);
 
         return std::make_tuple(dB_diss[0], dB_diss[1], dB_diss[2], divB_clean[0], divB_clean[1], divB_clean[2],
                                du_diss);
