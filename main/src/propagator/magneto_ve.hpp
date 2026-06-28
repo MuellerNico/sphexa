@@ -298,13 +298,13 @@ public:
         acquire(d, "c11");
 
         // third output pass: recover temporary curlv and divv quantities
-        release(d, "prho", "c");
-        acquire(d, "divv", "curlv");
+        // release(d, "prho", "c");
+        // acquire(d, "divv", "curlv");
         // partial recovery of cij in range [first:last] without halos, which are not needed for divv and curlv
         if (!indicesDoneHydro.empty()) { computeIadDivvCurlvGradh(groups_.view(), d, box); }
         output();
-        release(d, "divv", "curlv");
-        acquire(d, "prho", "c");
+        // release(d, "divv", "curlv");
+        // acquire(d, "prho", "c");
 
         /* The following data is now lost and no longer available in the integration step
          *  c11, c12, c12: halos invalidated

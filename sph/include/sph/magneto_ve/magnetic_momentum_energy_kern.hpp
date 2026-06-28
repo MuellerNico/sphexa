@@ -298,7 +298,7 @@ struct MagneticMomentumAndEnergyPostambleWithDt : MagneticMomentumAndEnergyPosta
     }
 };
 
-template<bool avClean, class Neighborhood, class Tc, class T, class Tm, class Tm1>
+template<bool SLR, class Neighborhood, class Tc, class T, class Tm, class Tm1>
 void magneticMomentumAndEnergyIjLoop(Neighborhood const& neighborhood, Tc K, Tc Kcour, Tc mu_0, Tc alpha_u, T Atmin,
                                      T Atmax, T ramp, const T* vx, const T* vy, const T* vz, const Tm* m, const T* c,
                                      const Tc* u, const T* kx, const T* alpha, const T* xm, const T* p, const T* gradh,
@@ -306,24 +306,26 @@ void magneticMomentumAndEnergyIjLoop(Neighborhood const& neighborhood, Tc K, Tc 
                                      const unsigned* nc, const Tc* Bx, const Tc* By, const Tc* Bz, const T* dvxdx,
                                      const T* dvxdy, const T* dvxdz, const T* dvydx, const T* dvydy, const T* dvydz,
                                      const T* dvzdx, const T* dvzdy, const T* dvzdz, const T* tdpdTrho, const T* wh,
-                                     Tm1* du, T* grad_P_x, T* grad_P_y, T* grad_P_z, T* dt)
+                                     T avFloor, Tm1* du, T* grad_P_x, T* grad_P_y, T* grad_P_z, const T* divv, const T* curlv,
+                                     T* dt)
 {
-    if constexpr (!avClean) { dvxdx = dvxdy = dvxdz = dvydx = dvydy = dvydz = dvzdx = dvzdy = dvzdz = vx; }
+    if constexpr (!SLR) { dvxdx = dvxdy = dvxdz = dvydx = dvydy = dvydz = dvzdx = dvzdy = dvzdz = vx; }
     const auto input =
         std::make_tuple(vx, vy, vz, m, c, u, kx, alpha, xm, p, gradh, c11, c12, c13, c22, c23, c33, nc, Bx, By, Bz,
                         dvxdx, dvxdy, dvxdz, dvydx, dvydy, dvydz, dvzdx, dvzdy, dvzdz,
-                        tdpdTrho ? tdpdTrho : vx /* pass random derefable array if tdpdTrho is null */);
+                        tdpdTrho ? tdpdTrho : vx /* pass random derefable array if tdpdTrho is null */,
+                        divv, curlv);
     const auto output = std::make_tuple(du, grad_P_x, grad_P_y, grad_P_z, dt);
     if (tdpdTrho)
     {
         neighborhood.ijLoop(input, output,
-                            MagneticMomentumAndEnergyInteraction<avClean, T>{wh, T(mu_0), T(alpha_u), Atmin, Atmax, ramp},
+                            MagneticMomentumAndEnergyInteraction<SLR, T>{wh, T(mu_0), T(alpha_u), Atmin, Atmax, ramp, avFloor},
                             MagneticMomentumAndEnergyPostambleWithDt<true, T, Tc>{K, mu_0, Kcour});
     }
     else
     {
         neighborhood.ijLoop(input, output,
-                            MagneticMomentumAndEnergyInteraction<avClean, T>{wh, T(mu_0), T(alpha_u), Atmin, Atmax, ramp},
+                            MagneticMomentumAndEnergyInteraction<SLR, T>{wh, T(mu_0), T(alpha_u), Atmin, Atmax, ramp, avFloor},
                             MagneticMomentumAndEnergyPostambleWithDt<false, T, Tc>{K, mu_0, Kcour});
     }
 }
