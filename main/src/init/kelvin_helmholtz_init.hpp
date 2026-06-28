@@ -258,10 +258,10 @@ class MagneticKelvinHelmholtz : public KelvinHelmholtzGlass<SimulationData>
 public:
     using KelvinHelmholtzGlass<SimulationData>::KelvinHelmholtzGlass;
 
-    cstone::Box<typename SimulationData::RealType> init(int rank, int numRanks, size_t cbrtNumPart,
+    cstone::Box<typename SimulationData::RealType> initImpl(int rank, int numRanks, size_t cbrtNumPart,
                                                         SimulationData& simData, IFileReader* reader) const override
     {
-        auto box = KelvinHelmholtzGlass<SimulationData>::init(rank, numRanks, cbrtNumPart, simData, reader);
+        auto box = KelvinHelmholtzGlass<SimulationData>::initImpl(rank, numRanks, cbrtNumPart, simData, reader);
 
         auto& md = simData.magneto;
         md.resize(simData.hydro.x.size());

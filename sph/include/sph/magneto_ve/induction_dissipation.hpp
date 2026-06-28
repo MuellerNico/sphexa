@@ -35,106 +35,28 @@
 namespace sph::magneto
 {
 
-template<class Tc, class SimData>
-void computeInductionAndDissipationImpl(size_t startIndex, size_t endIndex, SimData& sim, const cstone::Box<Tc>& box)
-{
-
-    auto&                     d              = sim.hydro;
-    auto&                     md             = sim.magneto;
-    const cstone::LocalIndex* neighbors      = d.neighbors.data();
-    const unsigned*           neighborsCount = d.nc.data();
-
-    const auto* x  = d.x.data();
-    const auto* y  = d.y.data();
-    const auto* z  = d.z.data();
-    const auto* vx = d.vx.data();
-    const auto* vy = d.vy.data();
-    const auto* vz = d.vz.data();
-    const auto* h  = d.h.data();
-    const auto* c  = d.c.data();
-
-    auto* c11 = d.c11.data();
-    auto* c12 = d.c12.data();
-    auto* c13 = d.c13.data();
-    auto* c22 = d.c22.data();
-    auto* c23 = d.c23.data();
-    auto* c33 = d.c33.data();
-
-    auto* dvxdx = md.dvxdx.data();
-    auto* dvxdy = md.dvxdy.data();
-    auto* dvxdz = md.dvxdz.data();
-    auto* dvydx = md.dvydx.data();
-    auto* dvydy = md.dvydy.data();
-    auto* dvydz = md.dvydz.data();
-    auto* dvzdx = md.dvzdx.data();
-    auto* dvzdy = md.dvzdy.data();
-    auto* dvzdz = md.dvzdz.data();
-
-    const auto* wh    = d.wh.data();
-    const auto* whd   = d.whd.data();
-    const auto* kx    = d.kx.data();
-    const auto* xm    = d.xm.data();
-    const auto* m     = d.m.data();
-    const auto* gradh = d.gradh.data();
-
-    const auto* Bx   = md.Bx.data();
-    const auto* By   = md.By.data();
-    const auto* Bz   = md.Bz.data();
-    const auto* divB = md.divB.data();
-
-    auto* psi_ch   = md.psi_ch.data();
-    auto* dBx      = md.dBx.data();
-    auto* dBy      = md.dBy.data();
-    auto* dBz      = md.dBz.data();
-    auto* d_psi_ch = md.d_psi_ch.data();
-    auto* du       = d.du.data();
-    auto* alpha_B  = md.alpha_B.data();
-
-    const auto* dBxdx = md.dBxdx.data();
-    const auto* dBxdy = md.dBxdy.data();
-    const auto* dBxdz = md.dBxdz.data();
-    const auto* dBydx = md.dBydx.data();
-    const auto* dBydy = md.dBydy.data();
-    const auto* dBydz = md.dBydz.data();
-    const auto* dBzdx = md.dBzdx.data();
-    const auto* dBzdy = md.dBzdy.data();
-    const auto* dBzdz = md.dBzdz.data();
-
-     // get mu_0 from simData, should maybe move it to MagnetoData
-
-#pragma omp parallel for
-    for (size_t i = startIndex; i < endIndex; ++i)
-    {
-        size_t   ni       = i - startIndex;
-        unsigned ncCapped = std::min(neighborsCount[i] - 1, d.ngmax);
-
-        // Induction Equation
-        dBx[i] = -Bx[i] * (dvydy[i] + dvzdz[i]) + By[i] * dvxdy[i] + Bz[i] * dvxdz[i];
-        dBy[i] = -By[i] * (dvxdx[i] + dvzdz[i]) + Bx[i] * dvydx[i] + Bz[i] * dvydz[i];
-        dBz[i] = -Bz[i] * (dvxdx[i] + dvydy[i]) + Bx[i] * dvzdx[i] + By[i] * dvzdy[i];
-
-        inductionAndDissipationJLoop(i, d.K, md.mu_0, box, neighbors + d.ngmax * ni, ncCapped, x, y, z, vx, vy, vz, c,
-                                     Bx, By, Bz, h, c11, c12, c13, c22, c23, c33, wh, xm, kx, gradh, m, psi_ch, &dBx[i],
-                                     &dBy[i], &dBz[i], &du[i], alpha_B, dBxdx, dBxdy, dBxdz, dBydx, dBydy, dBydz, dBzdx,
-                                     dBzdy, dBzdz, md.resistivityScheme);
-
-        // get psi time differential with the recipe of Wissing et al (2020)
-        auto rho_i     = kx[i] * m[i] / xm[i];
-        auto v_alfven2 = (Bx[i] * Bx[i] + By[i] * By[i] + Bz[i] * Bz[i]) / (md.mu_0 * rho_i);
-        auto ch        = fclean * std::sqrt(c[i] * c[i] + v_alfven2);
-        auto tau_Inv   = (sigma_c * ch) / h[i];
-        d_psi_ch[i]    = -ch * divB[i] - psi_ch[i] * (tau_Inv + (dvxdx[i] + dvydy[i] + dvzdz[i]) / 2);
-    }
-}
-
 template<class Tc, class SimulationData>
 void computeInductionAndDissipation(const GroupView& grp, SimulationData& sim, const cstone::Box<Tc>& box)
 {
+    auto& d  = sim.hydro;
+    auto& md = sim.magneto;
+
     if constexpr (cstone::HaveGpu<typename SimulationData::AcceleratorType>{})
     {
-        cuda::computeInductionAndDissipationGpu(grp, sim.hydro, sim.magneto, box);
+        cuda::computeInductionAndDissipationGpu(grp, d, md, box);
     }
-    else { computeInductionAndDissipationImpl(grp.firstBody, grp.lastBody, sim, box); }
+    else
+    {
+        inductionAndDissipationIjLoop(
+            d.neighborhood, d.K, md.mu_0, md.resistivityScheme, d.vx.data(), d.vy.data(), d.vz.data(), d.c.data(),
+            md.Bx.data(), md.By.data(), md.Bz.data(), d.m.data(), d.xm.data(), d.kx.data(), d.gradh.data(),
+            d.c11.data(), d.c12.data(), d.c13.data(), d.c22.data(), d.c23.data(), d.c33.data(), md.alpha_B.data(),
+            md.psi_ch.data(), d.nc.data(), md.dBxdx.data(), md.dBxdy.data(), md.dBxdz.data(), md.dBydx.data(),
+            md.dBydy.data(), md.dBydz.data(), md.dBzdx.data(), md.dBzdy.data(), md.dBzdz.data(), md.dvxdx.data(),
+            md.dvxdy.data(), md.dvxdz.data(), md.dvydx.data(), md.dvydy.data(), md.dvydz.data(), md.dvzdx.data(),
+            md.dvzdy.data(), md.dvzdz.data(), md.divB.data(), d.wh.data(), md.dBx.data(), md.dBy.data(), md.dBz.data(),
+            d.du.data(), md.d_psi_ch.data());
+    }
 }
 
 } // namespace sph::magneto

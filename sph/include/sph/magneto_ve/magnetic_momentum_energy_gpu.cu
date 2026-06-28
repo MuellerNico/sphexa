@@ -28,11 +28,11 @@
  *
  */
 
-#include <cub/cub.cuh>
+#include <limits>
 
-#include "cstone/cuda/cuda_utils.cuh"
-#include "cstone/traversal/find_neighbors.cuh"
+#include "cstone/primitives/warpscan.cuh"
 
+#include "sph/neighborhood_gpu.hpp"
 #include "sph/sph_gpu.hpp"
 #include "sph/particles_data.hpp"
 #include "sph/magneto_ve/magneto_data.hpp"
@@ -45,127 +45,65 @@ namespace magneto::cuda
 
 using cstone::GpuConfig;
 using cstone::LocalIndex;
-using cstone::TravConfig;
-using cstone::TreeNodeIndex;
 
 static __device__ float minDt_ve_device;
 
-template<bool avClean, class Tc, class Tm, class T, class Tm1, class KeyType>
-__global__ void
-magneticMomentumGpu(Tc K, Tc Kcour, T Atmin, T Atmax, T ramp, unsigned ngmax, const cstone::Box<Tc> box,
-                    const LocalIndex* grpStart, const LocalIndex* grpEnd, LocalIndex numGroups,
-                    const cstone::OctreeNsView<Tc, KeyType> tree, const Tc mu_0, const Tc alpha_u,
-                    const Tc* x, const Tc* y, const Tc* z,
-                    const T* vx, const T* vy, const T* vz, const T* h, const Tm* m, const T* p, const T* tdpdTrho,
-                    const T* c, const Tc* u, const T* c11, const T* c12, const T* c13, const T* c22, const T* c23,
-                    const T* c33, const T* wh, const T* kx, const T* xm, const T* alpha, const T* dvxdx, const T* dvxdy,
-                    const T* dvxdz, const T* dvydx, const T* dvydy, const T* dvydz, const T* dvzdx, const T* dvzdy,
-                    const T* dvzdz, const Tc* Bx, const Tc* By, const Tc* Bz, const T* gradh, T* grad_P_x, T* grad_P_y,
-                    T* grad_P_z, Tm1* du, LocalIndex* nidx, TreeNodeIndex* globalPool, float* groupDt)
+template<class T>
+__global__ void reduceDt(const LocalIndex* __restrict__ grpStart, const LocalIndex* __restrict__ grpEnd,
+                         const LocalIndex numGroups, const T* dtCourant, float* __restrict__ groupDt)
 {
-    unsigned laneIdx     = threadIdx.x & (GpuConfig::warpSize - 1);
-    unsigned targetIdx   = 0;
-    unsigned warpIdxGrid = (blockDim.x * blockIdx.x + threadIdx.x) >> GpuConfig::warpSizeLog2;
+    unsigned laneIdx = threadIdx.x & (GpuConfig::warpSize - 1);
+    unsigned grpIdx  = (blockDim.x * blockIdx.x + threadIdx.x) >> GpuConfig::warpSizeLog2;
 
-    LocalIndex* neighborsWarp = nidx + ngmax * TravConfig::targetSize * warpIdxGrid;
+    if (grpIdx >= numGroups) return;
 
-    T dt_i = INFINITY;
+    LocalIndex bodyBegin = grpStart[grpIdx];
+    LocalIndex bodyEnd   = grpEnd[grpIdx];
+    LocalIndex i         = bodyBegin + laneIdx;
 
-    while (true)
-    {
-        // first thread in warp grabs next target
-        if (laneIdx == 0) { targetIdx = atomicAdd(&cstone::targetCounterGlob, 1); }
-        targetIdx = cstone::shflSync(targetIdx, 0);
-
-        if (targetIdx >= numGroups) { break; }
-
-        LocalIndex bodyBegin = grpStart[targetIdx];
-        LocalIndex bodyEnd   = grpEnd[targetIdx];
-        LocalIndex i         = bodyBegin + laneIdx;
-
-        auto ncTrue = traverseNeighbors(bodyBegin, bodyEnd, x, y, z, h, tree, box, neighborsWarp, ngmax, globalPool);
-        unsigned ncCapped = stl::min(ncTrue[0], ngmax);
-        T        maxvsignal;
-
-        if (i < bodyEnd)
-        {
-            magneticMomentumJLoop<avClean, TravConfig::targetSize>(
-                i, K, mu_0, alpha_u, box, neighborsWarp + laneIdx, ncCapped, x, y, z, vx, vy, vz, h, m, p, tdpdTrho, c,
-                u, c11, c12, c13, c22, c23, c33, Atmin, Atmax, ramp, wh, kx, xm, alpha, dvxdx, dvxdy, dvxdz, dvydx,
-                dvydy, dvydz, dvzdx, dvzdy, dvzdz, Bx, By, Bz, gradh, grad_P_x, grad_P_y, grad_P_z, du, &maxvsignal);
-        }
-
-        // auto dt_lane = (i < bodyEnd) ? tsKCourant(maxvsignal, h[i], c[i], Kcour) : INFINITY;
-        T dt_lane;
-        if (i < bodyEnd)
-        {
-            T rhoi            = kx[i] * m[i] / xm[i];
-            T v_alfven2       = (Bx[i] * Bx[i] + By[i] * By[i] + Bz[i] * Bz[i]) / (mu_0 * rhoi);
-            T magneticVsignal = std::sqrt(c[i] * c[i] + v_alfven2);
-
-            dt_lane = maxvsignal > T(0) ? stl::min(Kcour * h[i] / magneticVsignal, Kcour * h[i] / maxvsignal)
-                                          : Kcour * h[i] / magneticVsignal;
-        }
-        else { dt_lane = INFINITY; }
-        if (groupDt != nullptr)
-        {
-            auto min_dt_group = cstone::warpMin(dt_lane);
-            if ((threadIdx.x & (GpuConfig::warpSize - 1)) == 0)
-            {
-                groupDt[targetIdx] = stl::min(groupDt[targetIdx], static_cast<float>(min_dt_group));
-            }
-        }
-
-        dt_i = stl::min(dt_i, dt_lane);
-    }
-
-    typedef cub::BlockReduce<T, TravConfig::numThreads> BlockReduce;
-    __shared__ typename BlockReduce::TempStorage        temp_storage;
-
-    BlockReduce reduce(temp_storage);
-    T           blockMin = reduce.Reduce(dt_i, thrust::minimum<>{});
+    __shared__ float minBlockDt;
+    if (threadIdx.x == 0) minBlockDt = std::numeric_limits<float>::infinity();
     __syncthreads();
 
-    if (threadIdx.x == 0) { cstone::atomicMinFloat(&minDt_ve_device, blockMin); }
+    float dt         = i < bodyEnd ? dtCourant[i] : std::numeric_limits<T>::infinity();
+    float minGroupDt = cstone::warpMin(dt);
+    if (groupDt && laneIdx == 0) groupDt[grpIdx] = std::min(groupDt[grpIdx], minGroupDt);
+
+    if (laneIdx == 0) cstone::atomicMinFloat(&minBlockDt, minGroupDt);
+    __syncthreads();
+    if (threadIdx.x == 0) cstone::atomicMinFloat(&minDt_ve_device, minBlockDt);
 }
 
 template<bool avClean, class HydroData, class MagnetoData>
 void computeMagneticMomentumEnergy(const GroupView& grp, float* groupDt, HydroData& d, MagnetoData& m,
-                                   const cstone::Box<typename HydroData::RealType>& box)
+                                   const cstone::Box<typename HydroData::RealType>&)
 {
+    magneticMomentumAndEnergyIjLoop<avClean>(
+        d.neighborhood, d.K, d.Kcour, m.mu_0, m.alpha_u, d.Atmin, d.Atmax, d.ramp, rawPtr(d.vx), rawPtr(d.vy),
+        rawPtr(d.vz), rawPtr(d.m), rawPtr(d.c), rawPtr(d.u), rawPtr(d.kx), rawPtr(d.alpha), rawPtr(d.xm), rawPtr(d.p),
+        rawPtr(d.gradh), rawPtr(d.c11), rawPtr(d.c12), rawPtr(d.c13), rawPtr(d.c22), rawPtr(d.c23), rawPtr(d.c33),
+        rawPtr(d.nc), rawPtr(m.Bx), rawPtr(m.By), rawPtr(m.Bz), rawPtr(m.dvxdx), rawPtr(m.dvxdy), rawPtr(m.dvxdz),
+        rawPtr(m.dvydx), rawPtr(m.dvydy), rawPtr(m.dvydz), rawPtr(m.dvzdx), rawPtr(m.dvzdy), rawPtr(m.dvzdz),
+        rawPtr(d.tdpdTrho), rawPtr(d.wh), rawPtr(d.du), rawPtr(d.ax), rawPtr(d.ay), rawPtr(d.az), rawPtr(d.dtCourant));
 
-    auto [traversalPool, nidxPool] = cstone::allocateNcStacks(d.traversalStack, d.ngmax);
+    float minDt = std::numeric_limits<float>::infinity();
+    checkGpuErrors(cudaMemcpyToSymbolAsync(GPU_SYMBOL(minDt_ve_device), &minDt, sizeof(minDt)));
 
-    float huge = 1e10;
-    checkGpuErrors(cudaMemcpyToSymbol(minDt_ve_device, &huge, sizeof(huge)));
-    cstone::resetTraversalCounters<<<1, 1>>>();
+    constexpr LocalIndex threads = 256;
+    const LocalIndex     blocks  = cstone::iceil(grp.numGroups, threads / GpuConfig::warpSize);
+    reduceDt<<<blocks, threads>>>(grp.groupStart, grp.groupEnd, grp.numGroups, rawPtr(d.dtCourant), groupDt);
 
-    magneticMomentumGpu<avClean><<<TravConfig::numBlocks(), TravConfig::numThreads>>>(
-        d.K, d.Kcour, d.Atmin, d.Atmax, d.ramp, d.ngmax, box, grp.groupStart, grp.groupEnd, grp.numGroups, d.treeView,
-        m.mu_0, m.alpha_u, rawPtr(d.x), rawPtr(d.y), rawPtr(d.z), rawPtr(d.vx),
-        rawPtr(d.vy), rawPtr(d.vz), rawPtr(d.h), rawPtr(d.m), rawPtr(d.p),
-        rawPtr(d.tdpdTrho), rawPtr(d.c), rawPtr(d.u), rawPtr(d.c11), rawPtr(d.c12),
-        rawPtr(d.c13), rawPtr(d.c22), rawPtr(d.c23), rawPtr(d.c33),
-        rawPtr(d.wh), rawPtr(d.kx), rawPtr(d.xm), rawPtr(d.alpha),
-        rawPtr(m.dvxdx), rawPtr(m.dvxdy), rawPtr(m.dvxdz), rawPtr(m.dvydx),
-        rawPtr(m.dvydy), rawPtr(m.dvydz), rawPtr(m.dvzdx), rawPtr(m.dvzdy),
-        rawPtr(m.dvzdz), rawPtr(m.Bx), rawPtr(m.By), rawPtr(m.Bz),
-        rawPtr(d.gradh), rawPtr(d.ax), rawPtr(d.ay), rawPtr(d.az), rawPtr(d.du),
-        nidxPool, traversalPool, groupDt);
-    checkGpuErrors(cudaGetLastError());
-
-    float minDt;
-    checkGpuErrors(cudaMemcpyFromSymbol(&minDt, minDt_ve_device, sizeof(minDt)));
+    checkGpuErrors(cudaMemcpyFromSymbol(&minDt, GPU_SYMBOL(minDt_ve_device), sizeof(minDt)));
     d.minDtCourant = minDt;
 }
 
-#define MOM_ENERGY(avc)                                                                                                \
+#define MAG_MOM_ENERGY(avc)                                                                                             \
     template void computeMagneticMomentumEnergy<avc>(                                                                  \
         const GroupView& grp, float*, sphexa::ParticlesData<cstone::GpuTag>& d,                                        \
         sphexa::magneto::MagnetoData<cstone::GpuTag>& m, const cstone::Box<SphTypes::CoordinateType>&)
 
-MOM_ENERGY(true);
-MOM_ENERGY(false);
+MAG_MOM_ENERGY(true);
+MAG_MOM_ENERGY(false);
 
 } // namespace magneto::cuda
 } // namespace sph

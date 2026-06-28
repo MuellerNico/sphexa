@@ -30,104 +30,53 @@
 #pragma once
 
 #include "sph/sph_gpu.hpp"
+#include "sph/hydro_ve/iad_gradh_kern.hpp"
 #include "full_divv_curlv_kern.hpp"
 #include "divB_curlB_kern.hpp"
 
 namespace sph::magneto
 {
 
-template<class Tc, class SimulationData>
-void computeIadFullDivvCurlvImpl(size_t startIndex, size_t endIndex, SimulationData& sim, const cstone::Box<Tc>& box)
+//! @brief IAD coefficients + grad-h, reusing the hydro per-pair functors
+template<class Neighborhood, class Tc, class Tm, class T>
+void iadGradhIjLoop(Neighborhood const& neighborhood, Tc K, const Tm* m, const T* xm, const T* kx, const unsigned* nc,
+                    const T* wh, const T* whd, T* c11, T* c12, T* c13, T* c22, T* c23, T* c33, T* gradh)
 {
-    auto&                     d              = sim.hydro;
-    auto&                     md              = sim.magneto;
-    const cstone::LocalIndex* neighbors      = d.neighbors.data();
-    const unsigned*           neighborsCount = d.nc.data();
-
-    const auto* x  = d.x.data();
-    const auto* y  = d.y.data();
-    const auto* z  = d.z.data();
-    const auto* vx = d.vx.data();
-    const auto* vy = d.vy.data();
-    const auto* vz = d.vz.data();
-    const auto* h  = d.h.data();
-    const auto* m  = d.m.data();
-
-    auto* c11 = d.c11.data();
-    auto* c12 = d.c12.data();
-    auto* c13 = d.c13.data();
-    auto* c22 = d.c22.data();
-    auto* c23 = d.c23.data();
-    auto* c33 = d.c33.data();
-
-    auto* dvxdx = md.dvxdx.data();
-    auto* dvxdy = md.dvxdy.data();
-    auto* dvxdz = md.dvxdz.data();
-    auto* dvydx = md.dvydx.data();
-    auto* dvydy = md.dvydy.data();
-    auto* dvydz = md.dvydz.data();
-    auto* dvzdx = md.dvzdx.data();
-    auto* dvzdy = md.dvzdy.data();
-    auto* dvzdz = md.dvzdz.data();
-
-    const auto* wh    = d.wh.data();
-    const auto* whd   = d.whd.data();
-    const auto* kx    = d.kx.data();
-    const auto* xm    = d.xm.data();
-    
-    auto* gradh = d.gradh.data();
-
-    const auto* Bx = md.Bx.data();
-    const auto* By = md.By.data();
-    const auto* Bz = md.Bz.data();
-
-    auto* divv    = d.divv.data();
-    auto* curlv   = (d.x.size() == d.curlv.size()) ? d.curlv.data() : nullptr;
-    auto* divB    = md.divB.data();
-    auto* curlB_x = md.curlB_x.data();
-    auto* curlB_y = md.curlB_y.data();
-    auto* curlB_z = md.curlB_z.data();
-    auto* gradB_norm = md.gradB_norm.data();
-    auto* alpha_B    = md.alpha_B.data();
-
-    auto* dBxdx = md.dBxdx.data();
-    auto* dBxdy = md.dBxdy.data();
-    auto* dBxdz = md.dBxdz.data();
-    auto* dBydx = md.dBydx.data();
-    auto* dBydy = md.dBydy.data();
-    auto* dBydz = md.dBydz.data();
-    auto* dBzdx = md.dBzdx.data();
-    auto* dBzdy = md.dBzdy.data();
-    auto* dBzdz = md.dBzdz.data();
-
-#pragma omp parallel for
-    for (size_t i = startIndex; i < endIndex; ++i)
-    {
-        size_t   ni       = i - startIndex;
-        unsigned ncCapped = std::min(neighborsCount[i] - 1, d.ngmax);
-
-        IAD_gradhJLoop(i, d.K, box, neighbors + d.ngmax * ni, ncCapped, x, y, z, h, m, wh, whd, xm, kx, c11, c12, c13, c22, c23,
-                 c33, gradh);
-
-        full_divV_curlVJLoop(i, d.K, box, neighbors + d.ngmax * ni, ncCapped, x, y, z, vx, vy, vz, h, c11, c12, c13,
-                             c22, c23, c33, wh, whd, gradh, kx, xm, divv, curlv, dvxdx, dvxdy, dvxdz, dvydx, dvydy,
-                             dvydz, dvzdx, dvzdy, dvzdz);
-
-        divB_curlB_JLoop(i, d.K, box, neighbors + d.ngmax * ni, ncCapped, x, y, z, Bx, By, Bz, h, c11, c12, c13, c22,
-                         c23, c33, wh, gradh, kx, xm, divB, curlB_x, curlB_y, curlB_z, gradB_norm, alpha_B, dBxdx,
-                         dBxdy, dBxdz, dBydx, dBydy, dBydz, dBzdx, dBzdy, dBzdz, md.resistivityScheme,
-                         md.alpha_B_const);
-    }
+    neighborhood.ijLoop(std::make_tuple(m, xm, kx, nc), std::make_tuple(c11, c12, c13, c22, c23, c33, gradh),
+                        IADGradhInteraction<T>{wh, whd}, IADGradhPostamble<T, Tc>{K});
 }
 
 template<class Tc, class SimulationData>
 void computeIadFullDivvCurlv(const GroupView& grp, SimulationData& sim, const cstone::Box<Tc>& box)
 {
+    auto& d  = sim.hydro;
+    auto& md = sim.magneto;
+
     if constexpr (cstone::HaveGpu<typename SimulationData::AcceleratorType>{})
     {
-        cuda::computeIadFullDivvCurlv(grp, sim.hydro, sim.magneto, box);
+        cuda::computeIadFullDivvCurlv(grp, d, md, box);
     }
-    else { computeIadFullDivvCurlvImpl(grp.firstBody, grp.lastBody, sim, box); }
+    else
+    {
+        auto* curlv = (d.x.size() == d.curlv.size()) ? d.curlv.data() : nullptr;
+
+        iadGradhIjLoop(d.neighborhood, d.K, d.m.data(), d.xm.data(), d.kx.data(), d.nc.data(), d.wh.data(),
+                       d.whd.data(), d.c11.data(), d.c12.data(), d.c13.data(), d.c22.data(), d.c23.data(),
+                       d.c33.data(), d.gradh.data());
+
+        fullDivvCurlvIjLoop(d.neighborhood, d.K, d.vx.data(), d.vy.data(), d.vz.data(), d.kx.data(), d.xm.data(),
+                            d.c11.data(), d.c12.data(), d.c13.data(), d.c22.data(), d.c23.data(), d.c33.data(),
+                            d.gradh.data(), d.wh.data(), d.divv.data(), curlv, md.dvxdx.data(), md.dvxdy.data(),
+                            md.dvxdz.data(), md.dvydx.data(), md.dvydy.data(), md.dvydz.data(), md.dvzdx.data(),
+                            md.dvzdy.data(), md.dvzdz.data());
+
+        divBCurlBIjLoop(d.neighborhood, d.K, md.Bx.data(), md.By.data(), md.Bz.data(), d.kx.data(), d.xm.data(),
+                        d.c11.data(), d.c12.data(), d.c13.data(), d.c22.data(), d.c23.data(), d.c33.data(),
+                        d.gradh.data(), d.wh.data(), md.divB.data(), md.curlB_x.data(), md.curlB_y.data(),
+                        md.curlB_z.data(), md.gradB_norm.data(), md.alpha_B.data(), md.dBxdx.data(), md.dBxdy.data(),
+                        md.dBxdz.data(), md.dBydx.data(), md.dBydy.data(), md.dBydz.data(), md.dBzdx.data(),
+                        md.dBzdy.data(), md.dBzdz.data(), md.resistivityScheme, md.alpha_B_const);
+    }
 }
 
 } // namespace sph::magneto

@@ -76,7 +76,7 @@ protected:
 
     //! @brief list of dependent fields, these may be used as scratch space during domain sync
     using DependentFieldsHydro = FieldList<"ax", "ay", "az", "prho", "c", "p", "u", "du", "c11", "c12", "c13", "c22",
-                                           "c23", "c33", "xm", "kx", "nc", "gradh">;
+                                           "c23", "c33", "xm", "kx", "nc", "gradh", "dtCourant">;
     using DependentFieldsMagneto =
         FieldList<"dvxdx", "dvxdy", " dvxdz", "dvydx", "dvydy", "dvydz", "dvzdx", "dvzdy", "dvzdz", "divB", "curlB_x",
                   "curlB_y", "curlB_z", "gradB_norm", "alpha_B", "dBxdx", "dBxdy", "dBxdz", "dBydx", "dBydy", "dBydz",
@@ -141,14 +141,14 @@ public:
         auto& md = simData.magneto;
         d.resize(domain.nParticlesWithHalos());
         md.resize(domain.nParticlesWithHalos());
-        resizeNeighbors(d, domain.nParticles() * d.ngmax);
         size_t first = domain.startIndex();
         size_t last  = domain.endIndex();
 
         fillMassHalos(get<"m">(d), first, last);
 
-        findNeighborsSfc(first, last, d, domain.box());
         computeGroups(first, last, d, domain.box(), groups_);
+        updateSmoothingLengthIterative(groups_.view(), d, domain.box());
+        findNeighborsSfc(groups_.view(), d, domain.box());
         timer.step("FindNeighbors");
         pmReader.step();
 

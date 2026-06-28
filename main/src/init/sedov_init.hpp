@@ -261,10 +261,10 @@ public:
         settings_ = buildSettings(sim, magneticSedovConstants(), settingsFile, reader);
     }
 
-    cstone::Box<typename SimData::RealType> init(int rank, int numRanks, size_t cbrtNumPart, SimData& simData,
+    cstone::Box<typename SimData::RealType> initImpl(int rank, int numRanks, size_t cbrtNumPart, SimData& simData,
                                                  IFileReader* reader) const override
     {
-        auto  box = SedovGlass<SimData>::init(rank, numRanks, cbrtNumPart, simData, reader);
+        auto  box = SedovGlass<SimData>::initImpl(rank, numRanks, cbrtNumPart, simData, reader);
         auto& md  = simData.magneto;
         md.resize(simData.hydro.x.size());
         initMagnetoFields(md, simData.hydro, settings_);

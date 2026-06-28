@@ -159,12 +159,13 @@ protected:
 public:
     MhdRotorGlass(std::string initBlock, std::string settingsFile, IFileReader* reader)
         : glassBlock(std::move(initBlock))
+        , ISimInitializer<SimData>(settingsFile)
     {
         SimData d;
         settings_ = buildSettings(d, MhdRotorConstants(), settingsFile, reader);
     }
 
-    cstone::Box<typename SimData::RealType> init(int rank, int numRanks, size_t cbrtNumPart, SimData& simData,
+    cstone::Box<typename SimData::RealType> initImpl(int rank, int numRanks, size_t cbrtNumPart, SimData& simData,
                                                  IFileReader* reader) const override
     {
         auto& d       = simData.hydro;

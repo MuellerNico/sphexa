@@ -192,10 +192,10 @@ public:
         settings_ = buildSettings(d, TurbulenceMagnetoConstants(), settingsFile, reader);
     }
 
-    cstone::Box<typename Dataset::RealType> init(int rank, int numRanks, size_t cbrtNumPart, Dataset& simData,
+    cstone::Box<typename Dataset::RealType> initImpl(int rank, int numRanks, size_t cbrtNumPart, Dataset& simData,
                                                  IFileReader* reader) const override
     {
-        auto  box = TurbulenceGlass<Dataset>::init(rank, numRanks, cbrtNumPart, simData, reader);
+        auto  box = TurbulenceGlass<Dataset>::initImpl(rank, numRanks, cbrtNumPart, simData, reader);
         auto& md  = simData.magneto;
         md.resize(simData.hydro.x.size());
         initTurbulenceMagnetoFields(md, settings_);
