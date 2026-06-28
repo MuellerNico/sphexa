@@ -47,17 +47,20 @@ struct PropLib
 
     using PropPtr = std::unique_ptr<Propagator<DomainType, ParticleDataType>>;
 
-    static PropPtr makeHydroVeProp(std::ostream& output, size_t rank, bool avClean);
+    static PropPtr makeHydroVeProp(std::ostream& output, size_t rank, bool SLR, bool AVswitches);
     static PropPtr makeHydroProp(std::ostream& output, size_t rank);
-    static PropPtr makeHydroVeBdtProp(std::ostream& output, size_t rank, const InitSettings& settings, bool avClean);
+    static PropPtr makeHydroVeBdtProp(std::ostream& output, size_t rank, const InitSettings& settings, bool SLR,
+                                      bool AVswitches);
     static PropPtr makeMagnetoHydroProp(std::ostream& output, size_t rank, const InitSettings& settings, bool avClean);
     static PropPtr makeMagnetoTurbProp(std::ostream& output, size_t rank, const InitSettings& settings, bool avClean);
 #ifdef SPH_EXA_HAVE_GRACKLE
     static PropPtr makeHydroGrackleProp(std::ostream& output, size_t rank, const InitSettings& settings);
 #endif
     static PropPtr makeNbodyProp(std::ostream& output, size_t rank);
-    static PropPtr makeTurbVeBdtProp(std::ostream& output, size_t rank, const InitSettings& settings, bool avClean);
-    static PropPtr makeTurbVeProp(std::ostream& output, size_t rank, const InitSettings& settings, bool avClean);
+    static PropPtr makeTurbVeBdtProp(std::ostream& output, size_t rank, const InitSettings& settings, bool SLR,
+                                     bool AVswitches);
+    static PropPtr makeTurbVeProp(std::ostream& output, size_t rank, const InitSettings& settings, bool SLR,
+                                  bool AVswitches);
 #ifdef SPH_EXA_HAVE_DISKS
     static PropPtr makeDiskProp(std::ostream& output, size_t rank, const InitSettings& settings);
     static PropPtr makeRelaxProp(std::ostream& output, size_t rank, const InitSettings& settings);
