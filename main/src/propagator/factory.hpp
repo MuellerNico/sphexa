@@ -68,7 +68,7 @@ propagatorFactory(const std::string& choice, bool avClean, std::ostream& output,
     {
         return PropLib<DomainType, ParticleDataType>::makeMagnetoHydroProp(output, rank, s, avClean);
     }
-    if (choice == "magneto-turbulence")
+    if (choice == "magneto-turb-ve")
     {
         return PropLib<DomainType, ParticleDataType>::makeMagnetoTurbProp(output, rank, s, avClean);
     }

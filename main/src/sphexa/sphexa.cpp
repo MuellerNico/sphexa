@@ -146,7 +146,7 @@ int main(int argc, char** argv)
     bool  haveGrav = (d.g != 0.0);
     float theta    = parser.get("--theta", haveGrav ? 0.5f : 1.0f);
 
-    if (propChoice == "magneto-ve" || propChoice == "magneto-turbulence")
+    if (propChoice == "magneto-ve" || propChoice == "magneto-turb-ve")
     {
         using sph::magneto::ResistivityScheme;
         if (resistivity == "switch") { md.resistivityScheme = ResistivityScheme::Switch; }

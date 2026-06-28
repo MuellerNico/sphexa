@@ -82,11 +82,6 @@ std::unique_ptr<ISimInitializer<Dataset>> initializerFactory(std::string testCas
         if (glassBlock.empty()) { throw std::runtime_error("need a valid glass block for turbulence test\n"); }
         else { return SimInitializers<Dataset>::makeTurbulence(glassBlock, settingsFile, reader); }
     }
-    if (testNamedBase == "turbulence-magneto")
-    {
-        if (glassBlock.empty()) { throw std::runtime_error("need a valid glass block for turbulence-magneto test\n"); }
-        else { return SimInitializers<Dataset>::makeTurbulenceMagneto(glassBlock, settingsFile, reader); }
-    }
     if (testNamedBase == "kelvin-helmholtz")
     {
         if (glassBlock.empty()) { throw std::runtime_error("need a valid glass block for Kelvin-Helmholtz test\n"); }
@@ -125,6 +120,11 @@ std::unique_ptr<ISimInitializer<Dataset>> initializerFactory(std::string testCas
     {
         if (glassBlock.empty()) { throw std::runtime_error("need a valid glass block for kelvin-helmholtz-magneto\n"); }
         return SimInitializers<Dataset>::makeKelvinHelmholtzMagneto(glassBlock, settingsFile, reader);
+    }
+    if (testNamedBase == "turbulence-magneto")
+    {
+        if (glassBlock.empty()) { throw std::runtime_error("need a valid glass block for turbulence-magneto test\n"); }
+        else { return SimInitializers<Dataset>::makeTurbulenceMagneto(glassBlock, settingsFile, reader); }
     }
     if (testNamedBase == "alfven-wave")
     {

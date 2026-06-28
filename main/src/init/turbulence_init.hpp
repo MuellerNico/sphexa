@@ -148,11 +148,11 @@ public:
 InitSettings TurbulenceMagnetoConstants()
 {
     InitSettings ret = TurbulenceConstants();
-    ret["Bmag"]      = 0.3;
+    ret["Bmag"]      = 0.15; // Plasmabeta=90, M_A=v_rms/v_A=2, mildly super-alfvenic
     return ret;
 }
 
-//! @brief uniform mean magnetic field along z; zero rates and cleaning scalar
+//! @brief uniform mean magnetic field along z
 template<class MagnetoData>
 void initTurbulenceMagnetoFields(MagnetoData& md, const std::map<std::string, double>& constants)
 {

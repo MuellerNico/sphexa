@@ -35,7 +35,7 @@
 #include "turb_ve.hpp"
 #include "ve_hydro.hpp"
 #include "magneto_ve.hpp"
-#include "magneto_turb.hpp"
+#include "magneto_turb_ve.hpp"
 
 namespace sphexa
 {
