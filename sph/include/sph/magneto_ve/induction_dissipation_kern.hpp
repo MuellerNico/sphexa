@@ -49,6 +49,7 @@ struct InductionAndDissipationInteraction
 {
     const T*          wh;
     T                 mu_0;
+    T                 arFloor; // 1=disabled
     ResistivityScheme scheme;
 
     template<class ParticleData, class Tc>
@@ -101,27 +102,54 @@ struct InductionAndDissipationInteraction
         T alpha_B_avg = T(0.5) * (alpha_Bi + alpha_Bj);
 
         cstone::Vec3<Tc> B_ab{Bxi - Bxj, Byi - Byj, Bzi - Bzj};
+        T Lij = T(1);
 
-        if (scheme == ResistivityScheme::SLR)
+        if (scheme == ResistivityScheme::SLR || scheme == ResistivityScheme::SLRB ||
+            scheme == ResistivityScheme::SLRB2)
         {
-            T               eta_crit_i = std::cbrt(T(32) * T(M_PI) / T(3) / T(nci));
-            Tc              eta_ab     = (v1 < v2) ? v1 : v2; // spacing in units of h
             cstone::Vec3<T> gradBx_i{dBxdxi, dBxdyi, dBxdzi};
             cstone::Vec3<T> gradBy_i{dBydxi, dBydyi, dBydzi};
             cstone::Vec3<T> gradBz_i{dBzdxi, dBzdyi, dBzdzi};
             cstone::Vec3<T> gradBx_j{dBxdxj, dBxdyj, dBxdzj};
             cstone::Vec3<T> gradBy_j{dBydxj, dBydyj, dBydzj};
             cstone::Vec3<T> gradBz_j{dBzdxj, dBzdyj, dBzdzj};
-            B_ab += mhdSLRCorrection<Tc, T>(r_ij, eta_ab, eta_crit_i, T(1), T(1), gradBx_i, gradBy_i, gradBz_i,
+
+            // SLR: pure reconstruction (balsi=balsj=1, Lij=1). SLRB/SLRB2: Balsara-like modulation.
+            T balsi = T(1);
+            T balsj = T(1);
+            if (scheme == ResistivityScheme::SLRB || scheme == ResistivityScheme::SLRB2)
+            {
+                T B_norm_i     = std::sqrt(Bxi * Bxi + Byi * Byi + Bzi * Bzi);
+                T B_norm_j     = std::sqrt(Bxj * Bxj + Byj * Byj + Bzj * Bzj);
+                T gradB_norm_i = std::sqrt(norm2(gradBx_i) + norm2(gradBy_i) + norm2(gradBz_i));
+                T gradB_norm_j = std::sqrt(norm2(gradBx_j) + norm2(gradBy_j) + norm2(gradBz_j));
+                T modulator_i  = (B_norm_i > T(0)) ? hi * gradB_norm_i / B_norm_i : T(1);
+                T modulator_j  = (B_norm_j > T(0)) ? hj * gradB_norm_j / B_norm_j : T(1);
+                modulator_i    = stl::max(T(0), stl::min(modulator_i, T(1))); // clamp to [0,1]
+                modulator_j    = stl::max(T(0), stl::min(modulator_j, T(1)));
+                Lij            = stl::max(arFloor, T(0.5) * (modulator_i + modulator_j));
+                if (scheme == ResistivityScheme::SLRB)
+                {
+                    balsi = T(1) - modulator_i;
+                    balsj = T(1) - modulator_j;
+                }
+                else // SLRB2
+                {
+                    balsi = T(1) - modulator_i * modulator_i;
+                    balsj = T(1) - modulator_j * modulator_j;
+                }
+            }
+            T  eta_crit_i = std::cbrt(T(32) * T(M_PI) / T(3) / T(nci));
+            Tc eta_ab     = (v1 < v2) ? v1 : v2; // spacing in units of h
+            B_ab += mhdSLRCorrection<Tc, T>(r_ij, eta_ab, eta_crit_i, balsi, balsj, gradBx_i, gradBy_i, gradBz_i,
                                             gradBx_j, gradBy_j, gradBz_j);
         }
 
         // Conjugate-pair (non-symmetric) artificial resistivity (Price et al. 2018, eqs. 181-182)
-        T grkern_i = dot(r_ij, termAi) * distInv;
-        T grkern_j = dot(r_ij, termAj) * distInv;
-
-        T diss_op =
-            T(0.5) * alpha_B_avg * v_sigB * mj * rhoi * (grkern_i / (rhoi * rhoi) + grkern_j / (rhoj * rhoj));
+        T grkern_i = dot(r_ij, termAi) * distInv / (rhoi * rhoi); // gradient kernel r̂·∇W/ρ²
+        T grkern_j = dot(r_ij, termAj) * distInv / (rhoj * rhoj);
+        T resistivity_ab = Lij * alpha_B_avg * v_sigB;
+        T diss_op = T(0.5) * mj * rhoi * resistivity_ab * (grkern_i + grkern_j);
 
         cstone::Vec3<Tc> dB_diss = diss_op * B_ab;
         T                du_diss = diss_op * norm2(B_ab);
@@ -182,7 +210,8 @@ struct InductionAndDissipationPostamble
 
 template<class Neighborhood, class Tc, class T, class Tm>
 void inductionAndDissipationIjLoop(
-    Neighborhood const& neighborhood, Tc K, Tc mu_0, ResistivityScheme scheme, const T* vx, const T* vy, const T* vz,
+    Neighborhood const& neighborhood, Tc K, Tc mu_0, ResistivityScheme scheme, T arFloor, const T* vx, const T* vy,
+    const T* vz,
     const T* c, const Tc* Bx, const Tc* By, const Tc* Bz, const Tm* m, const T* xm, const T* kx, const T* gradh,
     const T* c11, const T* c12, const T* c13, const T* c22, const T* c23, const T* c33, const T* alpha_B,
     const T* psi_ch, const unsigned* nc, const T* dBxdx, const T* dBxdy, const T* dBxdz, const T* dBydx,
@@ -195,7 +224,7 @@ void inductionAndDissipationIjLoop(
                         dBxdx, dBxdy, dBxdz, dBydx, dBydy, dBydz, dBzdx, dBzdy, dBzdz, dvxdx, dvxdy, dvxdz, dvydx,
                         dvydy, dvydz, dvzdx, dvzdy, dvzdz, divB, du);
     const auto output = std::make_tuple(dBx_dt, dBy_dt, dBz_dt, du, d_psi_ch);
-    neighborhood.ijLoop(input, output, InductionAndDissipationInteraction<T>{wh, T(mu_0), scheme},
+    neighborhood.ijLoop(input, output, InductionAndDissipationInteraction<T>{wh, T(mu_0), arFloor, scheme},
                         InductionAndDissipationPostamble<T, Tc>{K, T(mu_0)});
 }
 

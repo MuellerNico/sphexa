@@ -48,7 +48,8 @@ void computeInductionAndDissipation(const GroupView& grp, SimulationData& sim, c
     else
     {
         inductionAndDissipationIjLoop(
-            d.neighborhood, d.K, md.mu_0, md.resistivityScheme, d.vx.data(), d.vy.data(), d.vz.data(), d.c.data(),
+            d.neighborhood, d.K, md.mu_0, md.resistivityScheme, md.arFloor, d.vx.data(), d.vy.data(), d.vz.data(),
+            d.c.data(),
             md.Bx.data(), md.By.data(), md.Bz.data(), d.m.data(), d.xm.data(), d.kx.data(), d.gradh.data(),
             d.c11.data(), d.c12.data(), d.c13.data(), d.c22.data(), d.c23.data(), d.c33.data(), md.alpha_B.data(),
             md.psi_ch.data(), d.nc.data(), md.dBxdx.data(), md.dBxdy.data(), md.dBxdz.data(), md.dBydx.data(),

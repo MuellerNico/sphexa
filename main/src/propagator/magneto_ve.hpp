@@ -174,7 +174,7 @@ public:
         computeEOS(first, last, d);
         timer.step("EquationOfState");
 
-        domain.exchangeHalos(get<"c11", "c12", "c13", "c22", "c23", "c33", "divv", "c">(d), get<"ax">(d),
+        domain.exchangeHalos(get<"c11", "c12", "c13", "c22", "c23", "c33", "divv", "curlv", "c">(d), get<"ax">(d),
                              get<"keys">(d));
         timer.step("mpi::synchronizeHalos");
 

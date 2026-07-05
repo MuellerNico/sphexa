@@ -37,7 +37,9 @@ enum class ResistivityScheme : int
 {
     Constant = 0, //!< spatially uniform alpha_B set via CLI
     Switch   = 1, //!< Tricco & Price (2013) switch
-    SLR      = 2  //!< slope-limited reconstruction (SLR) based on viscosity version by García-Senz & Cabezón (2026) 
+    SLR      = 2, //!< slope-limited reconstruction of B (García-Senz & Cabezón 2026 analogue), reconstruction only
+    SLRB     = 3, //!< SLR + Balsara-like modulation (1 - modulator)
+    SLRB2    = 4  //!< SLR + Balsara-like modulation (1 - modulator^2)
 };
 
 } // namespace sph::magneto

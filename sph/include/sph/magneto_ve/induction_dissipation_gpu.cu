@@ -44,7 +44,8 @@ void computeInductionAndDissipationGpu(const GroupView& grp, HydroData& d, Magne
                                        const cstone::Box<typename HydroData::RealType>&)
 {
     inductionAndDissipationIjLoop(
-        d.neighborhood, d.K, m.mu_0, m.resistivityScheme, rawPtr(d.vx), rawPtr(d.vy), rawPtr(d.vz), rawPtr(d.c),
+        d.neighborhood, d.K, m.mu_0, m.resistivityScheme, m.arFloor, rawPtr(d.vx), rawPtr(d.vy), rawPtr(d.vz),
+        rawPtr(d.c),
         rawPtr(m.Bx), rawPtr(m.By), rawPtr(m.Bz), rawPtr(d.m), rawPtr(d.xm), rawPtr(d.kx), rawPtr(d.gradh),
         rawPtr(d.c11), rawPtr(d.c12), rawPtr(d.c13), rawPtr(d.c22), rawPtr(d.c23), rawPtr(d.c33), rawPtr(m.alpha_B),
         rawPtr(m.psi_ch), rawPtr(d.nc), rawPtr(m.dBxdx), rawPtr(m.dBxdy), rawPtr(m.dBxdz), rawPtr(m.dBydx),

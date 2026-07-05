@@ -76,8 +76,11 @@ public:
     // HydroType alpha_B_min{0.0};
 
     // Artificial resistivity scheme, selected via --resistivity. alpha_B_const is used when scheme == Constant.
-    sph::magneto::ResistivityScheme resistivityScheme{sph::magneto::ResistivityScheme::Switch};
+    sph::magneto::ResistivityScheme resistivityScheme{sph::magneto::ResistivityScheme::SLR};
     RealType                        alpha_B_const{1.0};
+    // Floor F in the SLR resistivity Balsara-like amplitude clamp Lij = max(F, modulator), set via --arfloor.
+    // 1.0 disables the modulation.
+    HydroType arFloor{1.0};
 
     // Artificial conductivity coefficient, set via --conductivity. 0 disables the AV heat conduction term.
     RealType alpha_u{0.0};

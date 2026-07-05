@@ -169,16 +169,20 @@ int main(int argc, char** argv)
         using sph::magneto::ResistivityScheme;
         if (resistivity == "switch") { md.resistivityScheme = ResistivityScheme::Switch; }
         else if (resistivity == "SLR" || resistivity == "slr") { md.resistivityScheme = ResistivityScheme::SLR; }
+        else if (resistivity == "SLRB" || resistivity == "slrb") { md.resistivityScheme = ResistivityScheme::SLRB; }
+        else if (resistivity == "SLRB2" || resistivity == "slrb2") { md.resistivityScheme = ResistivityScheme::SLRB2; }
         else
         {
             try { md.alpha_B_const = std::stod(resistivity); }
             catch (const std::exception&)
             {
                 throw std::runtime_error("invalid --resistivity value '" + resistivity +
-                                         "': expected \"switch\", \"SLR\", or a number");
+                                         "': expected \"switch\", \"SLR\", \"SLRB\", \"SLRB2\", or a number");
             }
             md.resistivityScheme = ResistivityScheme::Constant;
         }
+
+        if (parser.exists("--arfloor")) { md.arFloor = parser.get<double>("--arfloor"); }
 
         md.alpha_u = conductivity;
     }
@@ -322,7 +326,11 @@ void printHelp(char* name, int rank)
 
         printf("\t--resistivity STRING \t Artificial resistivity for the magneto-ve propagator:\n"
                "\t\t\t \"switch\" (Tricco & Price 2013), \"SLR\" (slope-limited reconstruction of B),\n"
-               "\t\t\t or a number to set a constant alpha_B [default: switch]\n\n");
+               "\t\t\t \"SLRB\"/\"SLRB2\" (SLR + Balsara-like modulation, power 1/2),\n"
+               "\t\t\t or a number to set a constant alpha_B [default: SLR]\n\n");
+
+        printf("\t--arfloor NUM \t Floor F in the SLRB/SLRB2 resistivity clamp Lij = max(F, modulator).\n"
+               "\t\t\t 1.0 disables the Lij floor [default: 1.0]\n\n");
 
         printf("\t--conductivity NUM \t Artificial conductivity coefficient alpha_u for the magneto-ve propagator.\n"
                "\t\t\t 0 disables the AV heat conduction term [default: 0]\n\n");

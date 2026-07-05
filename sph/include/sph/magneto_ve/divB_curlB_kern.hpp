@@ -126,13 +126,16 @@ struct DivBCurlBPostamble
 
         T alpha_B;
         if (scheme == ResistivityScheme::Constant) { alpha_B = alpha_B_const; }
-        else if (scheme == ResistivityScheme::SLR) { alpha_B = T(1); }
+        else if (scheme == ResistivityScheme::SLR || scheme == ResistivityScheme::SLRB ||
+                 scheme == ResistivityScheme::SLRB2)
+        {
+            alpha_B = T(1);
+        }
         else
         {
             // Switch (Tricco & Price 2013, eq. 16)
             T B_norm   = std::sqrt(Bxi * Bxi + Byi * Byi + Bzi * Bzi);
-            T eps      = T(1e-20);
-            T alpha_Bi = hi * gradB_norm / (B_norm + eps);
+            T alpha_Bi = (B_norm > 0) ? hi * gradB_norm / B_norm : alpha_B_max;
             if (alpha_Bi > alpha_B_max) alpha_Bi = alpha_B_max;
             if (alpha_Bi < alpha_B_min) alpha_Bi = alpha_B_min;
             alpha_B = alpha_Bi;
