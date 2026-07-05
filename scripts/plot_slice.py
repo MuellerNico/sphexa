@@ -11,6 +11,8 @@ from matplotlib.colors import LogNorm
 import os
 import sys
 import argparse
+import functools
+from multiprocessing import Pool
 
 from _h5_common import print_metadata, get_nsteps, resolve_field, resolution_label
 
@@ -83,13 +85,25 @@ _PLOT_AXES = {
     'x': ('y', 'z'),
 }
 
+# index of the vector component aligned with each spatial axis, used to pick the
+# two in-plane components of a --fieldlines vector for the streamplot.
+_AXIS_INDEX = {'x': 0, 'y': 1, 'z': 2}
+
+
+# Short stem for a component name, e.g. 'magneto::Bx' -> 'B', 'vy' -> 'v'.
+def _vector_stem(name):
+    short = name.split('::')[-1]
+    return short[:-1] if short[-1:] in 'xyz' else short
+
 
 # Read one step and return a dict of metadata plus the slice data: either an
 # interpolated grid (xi, yi, values) or, with scatter=True, the raw per-particle
 # samples in the slab (xs, ys, values). No plotting here.
 def compute_slice_grids(fname, step, field='rho', resolution=256,
-                        slice_axis='z', slice_pos=0.0, scatter=False):
+                        slice_axis='z', slice_pos=0.0, scatter=False,
+                        fieldlines=None):
     print(f"Reading step {step} from {fname}...")
+    ha, va = _PLOT_AXES[slice_axis]
     with h5py.File(fname, "r") as f:
         key = f"Step#{step}"
         if key not in f:
@@ -105,6 +119,15 @@ def compute_slice_grids(fname, step, field='rho', resolution=256,
         }
         values, label = resolve_field(s, field)
         time_val = s.attrs["time"][0]
+
+        # Resolve the two vector components lying in the slice plane.
+        stream = None
+        if fieldlines is not None:
+            uf = fieldlines[_AXIS_INDEX[ha]]
+            vf = fieldlines[_AXIS_INDEX[va]]
+            u_vals, _ = resolve_field(s, uf)
+            v_vals, _ = resolve_field(s, vf)
+            stream = (u_vals, v_vals, _vector_stem(uf))
 
         if "h" in s:
             h = np.array(s["h"])
@@ -128,7 +151,6 @@ def compute_slice_grids(fname, step, field='rho', resolution=256,
     print(f"  Particles in slice: {mask.sum()} / {n_particles} "
           f"({mask.sum() / n_particles * 100:.2f}%)")
 
-    ha, va = _PLOT_AXES[slice_axis]
     xs   = coords[ha][mask]
     ys   = coords[va][mask]
     zoff = coords[slice_axis][mask] - slice_pos
@@ -137,20 +159,31 @@ def compute_slice_grids(fname, step, field='rho', resolution=256,
     if scatter:
         return {'step': step, 'time': time_val, 'res_label': res_label,
                 'field': field, 'label': label, 'mode': 'scatter',
-                'xs': xs, 'ys': ys, 'values': values[mask]}
+                'xs': xs, 'ys': ys, 'values': values[mask],
+                'fieldlines': fieldlines is not None}
 
     print(f"  Interpolating onto {resolution}x{resolution} grid...")
     xi, yi, di = sph_scatter_to_grid(xs, ys, zoff, hs, values[mask], resolution)
 
-    return {'step': step, 'time': time_val, 'res_label': res_label,
-            'field': field, 'label': label, 'mode': 'grid',
-            'xi': xi, 'yi': yi, 'values': di}
+    out = {'step': step, 'time': time_val, 'res_label': res_label,
+           'field': field, 'label': label, 'mode': 'grid',
+           'xi': xi, 'yi': yi, 'values': di}
+
+    if stream is not None:
+        u_vals, v_vals, stem = stream
+        _, _, ug = sph_scatter_to_grid(xs, ys, zoff, hs, u_vals[mask], resolution)
+        _, _, vg = sph_scatter_to_grid(xs, ys, zoff, hs, v_vals[mask], resolution)
+        out.update(stream_u=ug, stream_v=vg, stream_stem=stem)
+
+    return out
 
 
 # Plot a precomputed slice (grid or scatter) and return the figure.
 def render_slice(grids, slice_axis='z', slice_pos=0.0, title=None,
                  vmin=None, vmax=None, cmap='bone_r', log=False, point_size=1.0,
-                 n_contours=0, contour_color='black'):
+                 n_contours=0, contour_color='black',
+                 fieldline_color='black', fieldline_density=1.0,
+                 fieldline_broken=False):
     ha, va = _PLOT_AXES[slice_axis]
     time_val = grids['time']
     header = title if title is not None else grids['label']
@@ -167,20 +200,32 @@ def render_slice(grids, slice_axis='z', slice_pos=0.0, title=None,
                         rasterized=True, **color_kw)
         if n_contours > 0:
             print("  (contours skipped: not supported in --scatter mode)")
+        if grids.get('fieldlines'):
+            print("  (field lines skipped: not supported in --scatter mode)")
     else:
         xi, yi, di = grids['xi'], grids['yi'], grids['values']
         im = ax.pcolormesh(xi, yi, di, cmap=cmap, shading='auto', **color_kw)
+        xc = 0.5 * (xi[0, :-1] + xi[0, 1:])
+        yc = 0.5 * (yi[:-1, 0] + yi[1:, 0])
         if n_contours > 0:
             lo = vmin if vmin is not None else np.nanmin(di)
             hi = vmax if vmax is not None else np.nanmax(di)
-            xc = 0.5 * (xi[0, :-1] + xi[0, 1:])
-            yc = 0.5 * (yi[:-1, 0] + yi[1:, 0])
             if log and lo > 0:
                 levels = np.geomspace(lo, hi, n_contours)
             else:
                 levels = np.linspace(lo, hi, n_contours)
             ax.contour(xc, yc, di, levels=levels,
                        colors=contour_color, linewidths=0.4, alpha=0.7)
+        if grids.get('stream_u') is not None:
+            ax.streamplot(xc, yc,
+                          np.nan_to_num(grids['stream_u']),
+                          np.nan_to_num(grids['stream_v']),
+                          color=fieldline_color, density=fieldline_density,
+                          linewidth=0.7, arrowsize=0.7,
+                          broken_streamlines=fieldline_broken)
+            ax.text(0.02, 0.98, f"{grids['stream_stem']} field lines",
+                    transform=ax.transAxes, va='top', ha='left', fontsize=9,
+                    color=fieldline_color)
     cbar = fig.colorbar(im, ax=ax, shrink=0.8)
     cbar.set_label(grids['label'])
     ax.set_xlabel(ha)
@@ -225,26 +270,75 @@ def _save_png(fig, fname, step, field, slice_axis, slice_pos, scatter=False):
 def plot_slice(fname, step, field='rho', resolution=256, slice_axis='z',
                slice_pos=0.0, title=None, vmin=None, vmax=None, cmap='bone_r',
                log=False, scatter=False, point_size=1.0,
-               n_contours=0, contour_color='black'):
-    g = compute_slice_grids(fname, step, field, resolution, slice_axis, slice_pos, scatter)
+               n_contours=0, contour_color='black',
+               fieldlines=None, fieldline_color='black', fieldline_density=1.0,
+               fieldline_broken=False):
+    g = compute_slice_grids(fname, step, field, resolution, slice_axis, slice_pos,
+                            scatter, fieldlines)
     fig = render_slice(g, slice_axis, slice_pos, title, vmin, vmax, cmap, log, point_size,
-                       n_contours, contour_color)
+                       n_contours, contour_color, fieldline_color, fieldline_density,
+                       fieldline_broken)
     _save_png(fig, fname, step, field, slice_axis, slice_pos, scatter)
 
 
-# One PNG per step, sharing a single colormap range across all of them.
+# Map func over items, fanning out across `jobs` worker processes (serial when
+# jobs <= 1). Steps are independent, so plotting parallelizes cleanly.
+def _pmap(jobs, func, items):
+    items = list(items)
+    if jobs > 1 and len(items) > 1:
+        with Pool(min(jobs, len(items))) as pool:
+            return pool.map(func, items)
+    return [func(x) for x in items]
+
+
+# Module-level (picklable) render+save of one precomputed grid, for the shared-
+# scale path where ranges are known only after every grid is computed.
+def _render_save(g, fname, field, slice_axis, slice_pos, title, vmin, vmax,
+                 cmap, log, point_size, n_contours, contour_color, scatter,
+                 fieldline_color, fieldline_density, fieldline_broken):
+    fig = render_slice(g, slice_axis, slice_pos, title, vmin, vmax, cmap, log,
+                       point_size, n_contours, contour_color,
+                       fieldline_color, fieldline_density, fieldline_broken)
+    _save_png(fig, fname, g['step'], field, slice_axis, slice_pos, scatter)
+
+
+# One PNG per step. With shared_scale (default) a single colormap range spans
+# all of them; otherwise each frame is auto-scaled to its own min/max. Explicit
+# vmin/vmax always apply in either mode. jobs > 1 fans steps out over processes.
 def plot_all_steps(fname, steps, field='rho', resolution=256, slice_axis='z',
                    slice_pos=0.0, title=None, vmin=None, vmax=None, cmap='bone_r',
                    log=False, scatter=False, point_size=1.0,
-                   n_contours=0, contour_color='black'):
-    grids = [compute_slice_grids(fname, s, field, resolution, slice_axis, slice_pos, scatter)
-             for s in steps]
+                   n_contours=0, contour_color='black',
+                   fieldlines=None, fieldline_color='black', fieldline_density=1.0,
+                   fieldline_broken=False, shared_scale=True, jobs=1):
+    # No shared range needed: compute+render+save each step independently.
+    if not shared_scale:
+        worker = functools.partial(plot_slice, fname, field=field, resolution=resolution,
+                                   slice_axis=slice_axis, slice_pos=slice_pos, title=title,
+                                   vmin=vmin, vmax=vmax, cmap=cmap, log=log, scatter=scatter,
+                                   point_size=point_size, n_contours=n_contours,
+                                   contour_color=contour_color, fieldlines=fieldlines,
+                                   fieldline_color=fieldline_color,
+                                   fieldline_density=fieldline_density,
+                                   fieldline_broken=fieldline_broken)
+        _pmap(jobs, worker, steps)
+        return
+
+    # Shared range: compute every grid first, then render against common limits.
+    compute = functools.partial(compute_slice_grids, fname, field=field, resolution=resolution,
+                                slice_axis=slice_axis, slice_pos=slice_pos, scatter=scatter,
+                                fieldlines=fieldlines)
+    grids = _pmap(jobs, compute, steps)
     vmin, vmax = shared_ranges(grids, vmin, vmax, log)
     print(f"Shared {field} scale: [{vmin:.6f}, {vmax:.6f}]" + (" (log)" if log else ""))
-    for g in grids:
-        fig = render_slice(g, slice_axis, slice_pos, title, vmin, vmax, cmap, log, point_size,
-                           n_contours, contour_color)
-        _save_png(fig, fname, g['step'], field, slice_axis, slice_pos, scatter)
+    render = functools.partial(_render_save, fname=fname, field=field, slice_axis=slice_axis,
+                               slice_pos=slice_pos, title=title, vmin=vmin, vmax=vmax, cmap=cmap,
+                               log=log, point_size=point_size, n_contours=n_contours,
+                               contour_color=contour_color, scatter=scatter,
+                               fieldline_color=fieldline_color,
+                               fieldline_density=fieldline_density,
+                               fieldline_broken=fieldline_broken)
+    _pmap(jobs, render, grids)
 
 
 if __name__ == "__main__":
@@ -258,6 +352,8 @@ if __name__ == "__main__":
             "  %(prog)s data.h5 5 --field Bmag             PNG of |B| at step 5\n"
             "  %(prog)s data.h5 --all --field magneto::alpha_B\n"
             "  %(prog)s data.h5 5 --axis x --pos 0.5\n"
+            "  %(prog)s data.h5 --field rho --fieldlines          rho slice + B field lines\n"
+            "  %(prog)s data.h5 --field rho --fieldlines vx,vy,vz  ... + velocity field lines\n"
         ),
     )
     parser.add_argument("file", help="HDF5 input file")
@@ -281,6 +377,9 @@ if __name__ == "__main__":
                         help="Lower colormap limit (default: auto)")
     parser.add_argument("--vmax", type=float, default=None,
                         help="Upper colormap limit (default: auto)")
+    parser.add_argument("--shared-scale", action=argparse.BooleanOptionalAction, default=True,
+                        help="With --all, share one colormap range across every frame "
+                             "(default: on). Use --no-shared-scale for per-frame auto-scaling.")
     parser.add_argument("--cmap", default="RdBu",
                         help="Matplotlib colormap name (default: RdBu)")
     parser.add_argument("-l", "--log", action="store_true",
@@ -294,6 +393,23 @@ if __name__ == "__main__":
                         help="Overlay N isocontours on grid plots (default: 0 = off)")
     parser.add_argument("--contour-color", default="black",
                         help="Contour line color (default: black)")
+    parser.add_argument("--fieldlines", nargs="?", default=None,
+                        const="magneto::Bx,magneto::By,magneto::Bz", metavar="FX,FY,FZ",
+                        help="Overlay a streamplot of a vector field on grid plots. "
+                             "Bare flag uses the B field; pass 3 comma-separated "
+                             "components for another (e.g. --fieldlines vx,vy,vz). "
+                             "The two components in the slice plane are used.")
+    parser.add_argument("--fieldline-color", default="black",
+                        help="Field-line streamplot color (default: black)")
+    parser.add_argument("--fieldline-density", type=float, default=1.0,
+                        help="Field-line streamplot density (default: 1.0)")
+    parser.add_argument("--fieldline-broken", action="store_true",
+                        help="Break streamlines when they crowd (matplotlib default). "
+                             "Off by default here so closed loops (e.g. MHD loop test) "
+                             "run as full circles.")
+    parser.add_argument("-j", "--jobs", type=int, default=1, metavar="N",
+                        help="Worker processes for --all (default: 1 = serial). "
+                             "In SLURM, pass -j \"$SLURM_CPUS_PER_TASK\".")
 
     args = parser.parse_args()
 
@@ -301,11 +417,21 @@ if __name__ == "__main__":
         print_metadata(args.file)
         sys.exit(0)
 
+    fieldlines = None
+    if args.fieldlines is not None:
+        fieldlines = [c.strip() for c in args.fieldlines.split(",")]
+        if len(fieldlines) != 3:
+            parser.error("--fieldlines needs exactly 3 comma-separated components "
+                         f"(x,y,z), got {len(fieldlines)}: {args.fieldlines!r}")
+
     common = dict(field=args.field, resolution=args.resolution, slice_axis=args.axis,
                   slice_pos=args.pos, title=args.title, vmin=args.vmin, vmax=args.vmax,
                   cmap=args.cmap, log=args.log, scatter=args.scatter,
                   point_size=args.point_size,
-                  n_contours=args.contours, contour_color=args.contour_color)
+                  n_contours=args.contours, contour_color=args.contour_color,
+                  fieldlines=fieldlines, fieldline_color=args.fieldline_color,
+                  fieldline_density=args.fieldline_density,
+                  fieldline_broken=args.fieldline_broken)
 
     if args.all:
         nsteps = get_nsteps(args.file)
@@ -313,7 +439,8 @@ if __name__ == "__main__":
             print(f"No steps found in {args.file}")
             sys.exit(1)
         print(f"Plotting all {nsteps} steps...")
-        plot_all_steps(args.file, list(range(nsteps)), **common)
+        plot_all_steps(args.file, list(range(nsteps)),
+                       shared_scale=args.shared_scale, jobs=args.jobs, **common)
     else:
         if args.step is None:
             nsteps = get_nsteps(args.file)
