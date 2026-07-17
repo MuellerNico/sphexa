@@ -154,7 +154,9 @@ struct SimInitializers
     static InitPtr makeAlfvenWave(std::string glassBlock, std::string settingsFile, IFileReader* reader);
     static InitPtr makeOrszagTang(std::string glassBlock, std::string settingsFile, IFileReader* reader);
     static InitPtr makeBrioWu(std::string glassBlock, std::string settingsFile, IFileReader* reader);
+    static InitPtr makeBrioWuGrid(std::string settingsFile, IFileReader* reader);
     static InitPtr makeMhdLoop(std::string glassBlock, std::string settingsFile, IFileReader* reader);
+    static InitPtr makeMhdLoopGrid(std::string settingsFile, IFileReader* reader);
     static InitPtr makeMhdRotor(std::string glassBlock, std::string settingsFile, IFileReader* reader);
 };
 

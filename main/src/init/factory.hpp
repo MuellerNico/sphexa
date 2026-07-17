@@ -138,13 +138,13 @@ std::unique_ptr<ISimInitializer<Dataset>> initializerFactory(std::string testCas
     }
     if (testNamedBase == "brio-wu")
     {
-        if (glassBlock.empty()) { throw std::runtime_error("need a valid glass block for brio-wu\n"); }
-        return SimInitializers<Dataset>::makeBrioWu(glassBlock, settingsFile, reader);
+        if (glassBlock.empty()) { return SimInitializers<Dataset>::makeBrioWuGrid(settingsFile, reader); }
+        else { return SimInitializers<Dataset>::makeBrioWu(glassBlock, settingsFile, reader); }
     }
     if (testNamedBase == "mhd-loop")
     {
-        if (glassBlock.empty()) { throw std::runtime_error("need a valid glass block for mhd-loop\n"); }
-        return SimInitializers<Dataset>::makeMhdLoop(glassBlock, settingsFile, reader);
+        if (glassBlock.empty()) { return SimInitializers<Dataset>::makeMhdLoopGrid(settingsFile, reader); }
+        else { return SimInitializers<Dataset>::makeMhdLoop(glassBlock, settingsFile, reader); }
     }
     if (testNamedBase == "mhd-rotor")
     {

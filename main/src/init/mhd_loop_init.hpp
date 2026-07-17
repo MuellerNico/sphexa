@@ -259,4 +259,107 @@ public:
 
     [[nodiscard]] const InitSettings& constants() const override { return settings_; }
 };
+
+template<class SimData>
+class MhdLoopGrid : public ISimInitializer<SimData>
+{
+    mutable InitSettings settings_;
+
+public:
+    MhdLoopGrid(std::string settingsFile, IFileReader* reader)
+        : ISimInitializer<SimData>(settingsFile)
+    {
+        SimData d;
+        settings_ = buildSettings(d, MhdLoopConstants(), settingsFile, reader);
+    }
+
+    cstone::Box<typename SimData::RealType> initImpl(int rank, int numRanks, size_t cbrtNumPart, SimData& simData,
+                                                 IFileReader*) const override
+    {
+        auto& d       = simData.hydro;
+        auto& md      = simData.magneto;
+        using KeyType = typename SimData::KeyType;
+        using T       = typename SimData::RealType;
+        auto pbc      = cstone::BoundaryType::periodic;
+
+        T L            = settings_.at("L");
+        T R0           = settings_.at("R0");
+        T rhoIn        = settings_.at("rhoIn");
+        T rhoOut       = settings_.at("rhoOut");
+        T densityRatio = rhoIn / rhoOut;
+
+        // -n is the number of lattice planes per length L, matching the effective glass resolution
+        // for the same -n. Thin box in z with a fixed 12-plane extent instead of the glass
+        // version's one-block layer.
+        size_t ny   = cbrtNumPart;
+        size_t nz   = 12;
+        T      step = L / ny;
+        T      Lz   = nz * step;
+
+        cstone::Box<T>       globalBox(-L, L, -L / 2, L / 2, 0, Lz, pbc, pbc, pbc);
+        cstone::Vec3<size_t> outerSide{2 * ny, ny, nz};
+
+        size_t numOuter    = outerSide[0] * outerSide[1] * outerSide[2];
+        auto [first, last] = partitionRange(numOuter, rank, numRanks);
+
+        std::vector<T> x(last - first), y(last - first), z(last - first);
+        regularGrid(globalBox, outerSide, first, last, x, y, z);
+
+        if (densityRatio != T(1))
+        {
+            // density-jump variant: carve a cylinder out of the outer lattice and refill it with a
+            // denser/sparser lattice. xy-only rescaling preserves the z planes, so the inner
+            // lattice becomes anisotropic by sqrt(densityRatio) — acceptable for a z-invariant test.
+            auto outsideCyl = [R0](auto u, auto v, auto) { return u * u + v * v >= R0 * R0; };
+            selectParticles(x, y, z, outsideCyl);
+
+            T halfA = T(0.5) / std::sqrt(densityRatio);
+            if (halfA < R0)
+            {
+                throw std::runtime_error("mhd-loop: density ratio too large for current R0 (max ratio = " +
+                                         std::to_string(1.0 / (4.0 * R0 * R0)) + ")\n");
+            }
+
+            cstone::Box<T>       innerBox(-halfA, halfA, -halfA, halfA, 0, Lz, pbc, pbc, pbc);
+            cstone::Vec3<size_t> innerSide{ny, ny, nz};
+
+            size_t numInner        = innerSide[0] * innerSide[1] * innerSide[2];
+            auto [firstIn, lastIn] = partitionRange(numInner, rank, numRanks);
+
+            std::vector<T> xIn(lastIn - firstIn), yIn(lastIn - firstIn), zIn(lastIn - firstIn);
+            regularGrid(innerBox, innerSide, firstIn, lastIn, xIn, yIn, zIn);
+
+            auto keepCyl = [R0](auto u, auto v, auto) { return u * u + v * v < R0 * R0; };
+            selectParticles(xIn, yIn, zIn, keepCyl);
+
+            std::copy(xIn.begin(), xIn.end(), std::back_inserter(x));
+            std::copy(yIn.begin(), yIn.end(), std::back_inserter(y));
+            std::copy(zIn.begin(), zIn.end(), std::back_inserter(z));
+        }
+
+        d.x = x;
+        d.y = y;
+        d.z = z;
+
+        size_t numParticlesGlobal = d.x.size();
+        MPI_Allreduce(MPI_IN_PLACE, &numParticlesGlobal, 1, MpiType<size_t>{}, MPI_SUM, simData.comm);
+        syncCoords<KeyType>(rank, numRanks, numParticlesGlobal, d.x, d.y, d.z, globalBox);
+
+        d.resize(d.x.size());
+        md.resize(d.x.size());
+
+        settings_["numParticlesGlobal"] = double(numParticlesGlobal);
+        BuiltinWriter attributeSetter(settings_);
+        d.loadOrStoreAttributes(&attributeSetter);
+
+        T outerVolume  = globalBox.lx() * globalBox.ly() * globalBox.lz();
+        T particleMass = outerVolume * rhoOut / numOuter;
+
+        initMhdLoopFields(simData, settings_, particleMass);
+
+        return globalBox;
+    }
+
+    [[nodiscard]] const InitSettings& constants() const override { return settings_; }
+};
 } // namespace sphexa

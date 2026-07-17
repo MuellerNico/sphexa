@@ -226,10 +226,24 @@ SimInitializers<Dataset>::makeBrioWu(std::string glassBlock, std::string setting
 }
 
 template<class Dataset>
+std::unique_ptr<ISimInitializer<Dataset>> SimInitializers<Dataset>::makeBrioWuGrid(std::string settingsFile,
+                                                                                   IFileReader* reader)
+{
+    return std::make_unique<BrioWuGrid<Dataset>>(settingsFile, reader);
+}
+
+template<class Dataset>
 std::unique_ptr<ISimInitializer<Dataset>>
 SimInitializers<Dataset>::makeMhdLoop(std::string glassBlock, std::string settingsFile, IFileReader* reader)
 {
     return std::make_unique<MhdLoopGlass<Dataset>>(glassBlock, settingsFile, reader);
+}
+
+template<class Dataset>
+std::unique_ptr<ISimInitializer<Dataset>> SimInitializers<Dataset>::makeMhdLoopGrid(std::string settingsFile,
+                                                                                    IFileReader* reader)
+{
+    return std::make_unique<MhdLoopGrid<Dataset>>(settingsFile, reader);
 }
 
 template<class Dataset>

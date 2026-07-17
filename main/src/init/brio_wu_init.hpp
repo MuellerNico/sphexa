@@ -23,6 +23,7 @@
  */
 
 /*! @file Initialization of the Brio-Wu MHD shock tube test
+ *  @author Nicolas Müller 
  */
 
 #pragma once
@@ -41,7 +42,7 @@ InitSettings BrioWuConstants()
     return {{"rhoL", 1.0},      {"rhoR", 0.125},
             {"pL", 1.0},        {"pR", 0.1},
             {"Bx", 0.75},       {"ByL", 1.0},          {"ByR", -1.0},
-            {"L", 1.0},         {"gamma", 2.0},
+            {"L", 2.0},         {"gamma", 2.0},
             {"mui", 10.},       {"Kcour", 0.2},
             {"ng0", 150},       {"ngmax", 200},
             {"minDt", 1e-7},    {"minDt_m1", 1e-7},
@@ -152,20 +153,23 @@ public:
         readTemplateBlock(glassBlock, reader, xBlock, yBlock, zBlock);
         size_t blockSize = xBlock.size();
 
-        // tube spans x in [-L, L] with the discontinuity at x = 0; Lt is the transverse extent
-        T L  = settings_.at("L");
-        T Lt = L / 4;
+        // Wissing & Shen (2020) sect. 3.3: tube spans x in [-L, L] with the discontinuity at
+        // x = 0 and a second one at the periodic boundary, so only the middle is physical.
+        // Thin box: Lt shrinks with resolution so the transverse particle count stays fixed,
+        // mirroring the paper's [1024, 24, 24] / [512, 12, 12] layout at feasible cost.
+        T L = settings_.at("L");
+
+        int multi1D = std::max(1, (int)std::rint(cbrtNumPart / std::cbrt(blockSize)));
+        T   Lt      = L / (4 * multi1D);
 
         cstone::Box<T> globalBox(-L, L, 0, Lt, 0, Lt, pbc, pbc, pbc);
         cstone::Box<T> leftBox(-L, 0, 0, Lt, 0, Lt, pbc, pbc, pbc);
         cstone::Box<T> rightBox(0, L, 0, Lt, 0, Lt, pbc, pbc, pbc);
 
-        int multi1D = std::rint(cbrtNumPart / std::cbrt(blockSize));
-
         // equal particle mass with rhoL/rhoR = 8: the dense (left) half gets 2x the
         // multiplicity per dimension, halving the inter-particle spacing
-        cstone::Vec3<int> leftMulti  = {8 * multi1D, 2 * multi1D, 2 * multi1D};
-        cstone::Vec3<int> rightMulti = {4 * multi1D, multi1D, multi1D};
+        cstone::Vec3<int> leftMulti  = {8 * multi1D, 2, 2};
+        cstone::Vec3<int> rightMulti = {4 * multi1D, 1, 1};
 
         auto [keyStart, keyEnd] = equiDistantSfcSegments<KeyType>(rank, numRanks, 100);
 
@@ -191,6 +195,87 @@ public:
         size_t numLeft      = size_t(leftMulti[0]) * leftMulti[1] * leftMulti[2] * blockSize;
         T      leftVolume   = L * Lt * Lt;
         T      particleMass = leftVolume * settings_.at("rhoL") / numLeft;
+
+        initBrioWuFields(simData, settings_, particleMass);
+
+        return globalBox;
+    }
+
+    [[nodiscard]] const InitSettings& constants() const override { return settings_; }
+};
+
+template<class SimData>
+class BrioWuGrid : public ISimInitializer<SimData>
+{
+    mutable InitSettings settings_;
+
+public:
+    BrioWuGrid(std::string settingsFile, IFileReader* reader)
+        : ISimInitializer<SimData>(settingsFile)
+    {
+        SimData d;
+        settings_ = buildSettings(d, BrioWuConstants(), settingsFile, reader);
+    }
+
+    cstone::Box<typename SimData::RealType> initImpl(int rank, int numRanks, size_t cbrtNumPart, SimData& simData,
+                                                 IFileReader*) const override
+    {
+        auto& d       = simData.hydro;
+        auto& md      = simData.magneto;
+        using KeyType = typename SimData::KeyType;
+        using T       = typename SimData::RealType;
+        auto pbc      = cstone::BoundaryType::periodic;
+
+        T L = settings_.at("L");
+
+        // -n is the number of lattice planes along x in the low-density (right) half, so -n 512
+        // reproduces Wissing & Shen (2020) [1024, 24, 24] / [512, 12, 12] exactly. The dense left
+        // half gets half the lattice spacing (rhoL/rhoR = 8 with equal particle mass), and the
+        // transverse extent is fixed at 12 right-half spacings, shrinking Lt as resolution grows.
+        size_t nxRight = cbrtNumPart;
+        size_t nt      = 12;
+        T      dxRight = L / nxRight;
+        T      Lt      = nt * dxRight;
+
+        cstone::Box<T> globalBox(-L, L, 0, Lt, 0, Lt, pbc, pbc, pbc);
+        cstone::Box<T> leftBox(-L, 0, 0, Lt, 0, Lt, pbc, pbc, pbc);
+        cstone::Box<T> rightBox(0, L, 0, Lt, 0, Lt, pbc, pbc, pbc);
+
+        cstone::Vec3<size_t> leftSide{2 * nxRight, 2 * nt, 2 * nt};
+        cstone::Vec3<size_t> rightSide{nxRight, nt, nt};
+
+        size_t numLeft  = leftSide[0] * leftSide[1] * leftSide[2];
+        size_t numRight = rightSide[0] * rightSide[1] * rightSide[2];
+
+        auto [firstLeft, lastLeft]   = partitionRange(numLeft, rank, numRanks);
+        auto [firstRight, lastRight] = partitionRange(numRight, rank, numRanks);
+
+        std::vector<T> x(lastLeft - firstLeft), y(lastLeft - firstLeft), z(lastLeft - firstLeft);
+        regularGrid(leftBox, leftSide, firstLeft, lastLeft, x, y, z);
+
+        std::vector<T> xR(lastRight - firstRight), yR(lastRight - firstRight), zR(lastRight - firstRight);
+        regularGrid(rightBox, rightSide, firstRight, lastRight, xR, yR, zR);
+
+        x.insert(x.end(), xR.begin(), xR.end());
+        y.insert(y.end(), yR.begin(), yR.end());
+        z.insert(z.end(), zR.begin(), zR.end());
+
+        d.x = x; // uploads to GPU if active
+        d.y = y;
+        d.z = z;
+
+        size_t numParticlesGlobal = numLeft + numRight;
+        syncCoords<KeyType>(rank, numRanks, numParticlesGlobal, d.x, d.y, d.z, globalBox);
+
+        d.resize(d.x.size());
+        md.resize(d.x.size());
+
+        settings_["numParticlesGlobal"] = double(numParticlesGlobal);
+        BuiltinWriter attributeSetter(settings_);
+        d.loadOrStoreAttributes(&attributeSetter);
+
+        T leftVolume   = L * Lt * Lt;
+        T particleMass = leftVolume * settings_.at("rhoL") / numLeft;
 
         initBrioWuFields(simData, settings_, particleMass);
 

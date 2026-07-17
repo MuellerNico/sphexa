@@ -130,6 +130,56 @@ void regularGrid(double r, size_t side, size_t first, size_t last, Vector& x, Ve
     }
 }
 
+/*! @brief create a regular grid spanning an arbitrary box, with per-dimension particle counts
+ *
+ * @tparam     T      float or double
+ * @tparam     Vector
+ * @param[in]  box    coordinate bounds of the grid
+ * @param[in]  side   number of particles along each dimension {x, y, z}
+ * @param[in]  first  index in [0, side[0]*side[1]*side[2]] of first particle to add to x,y,z
+ * @param[in]  last   index in [first, side[0]*side[1]*side[2]] of last particle to add to x,y,z
+ * @param[out] x      output coordinates, length = last - first
+ * @param[out] y
+ * @param[out] z
+ */
+template<class T, class Vector>
+void regularGrid(const cstone::Box<T>& box, cstone::Vec3<size_t> side, size_t first, size_t last, Vector& x, Vector& y,
+                 Vector& z)
+{
+    double stepX = box.lx() / side[0];
+    double stepY = box.ly() / side[1];
+    double stepZ = box.lz() / side[2];
+
+    double xIni = box.xmin() + 0.5 * stepX;
+    double yIni = box.ymin() + 0.5 * stepY;
+    double zIni = box.zmin() + 0.5 * stepZ;
+
+#pragma omp parallel for
+    for (size_t i = first / (side[0] * side[1]); i < last / (side[0] * side[1]) + 1; ++i)
+    {
+        double lz = zIni + (i * stepZ);
+
+        for (size_t j = 0; j < side[1]; ++j)
+        {
+            double ly = yIni + (j * stepY);
+
+            for (size_t k = 0; k < side[0]; ++k)
+            {
+                size_t lindex = (i * side[1] * side[0]) + (j * side[0]) + k;
+
+                if (first <= lindex && lindex < last)
+                {
+                    double lx = xIni + (k * stepX);
+
+                    z[lindex - first] = lz;
+                    y[lindex - first] = ly;
+                    x[lindex - first] = lx;
+                }
+            }
+        }
+    }
+}
+
 /*! @brief intersection of a box with a regular grid
  *
  * @tparam T   float or double
