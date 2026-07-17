@@ -203,3 +203,17 @@ def resolution_label(extents, n_particles):
     if abs(nx - ny) < 0.5 and abs(ny - nz) < 0.5:
         return f"~{n_cbrt}^3"
     return f"~{nx:.0f}x{ny:.0f}x{nz:.0f}, ~{n_cbrt}^3 total"
+
+
+# Font used for --clean publish figures; change once here. The later entries
+# are fallbacks for hosts without the first (Nimbus Roman is the
+# metric-compatible Times clone shipped on most Linux systems).
+CLEAN_FONT = "Times New Roman"
+
+
+def apply_clean_style():
+    import matplotlib
+    matplotlib.rcParams['font.family'] = 'serif'
+    matplotlib.rcParams['font.serif'] = [CLEAN_FONT, 'Nimbus Roman',
+                                         'Liberation Serif', 'STIXGeneral']
+    matplotlib.rcParams['mathtext.fontset'] = 'stix'

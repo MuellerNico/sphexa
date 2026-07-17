@@ -23,11 +23,15 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
+matplotlib.rcParams['xtick.direction'] = 'in'
+matplotlib.rcParams['ytick.direction'] = 'in'
+
 import os
 import sys
 import argparse
 
-from _h5_common import print_metadata, get_nsteps, resolve_field, resolution_label
+from _h5_common import (print_metadata, get_nsteps, resolve_field,
+                        resolution_label, CLEAN_FONT, apply_clean_style)
 import briowu_reference
 
 
@@ -151,7 +155,7 @@ def compute_tube_fields(fname, step, y0=None, z0=None, thickness=None,
 
 
 def render_shocktube(grids, title="Brio-Wu", limits=None, xlim=None,
-                     ms=1.0, color='tab:blue'):
+                     ms=1.0, color='tab:blue', clean=False):
     """Plot precomputed tube selections; a list of grids is overlaid per panel."""
     gs = list(grids) if isinstance(grids, (list, tuple)) else [grids]
     g0 = gs[0]
@@ -171,7 +175,7 @@ def render_shocktube(grids, title="Brio-Wu", limits=None, xlim=None,
         ax = flat[i]
         for g, c in zip(gs, colors):
             ax.plot(g['x'], g['data'][name], '.', ms=ms, color=c, alpha=0.3,
-                    zorder=2, label=g.get('label', 'SPHEXA'))
+                    zorder=2, rasterized=True, label=g.get('label', 'SPHEXA'))
         if ref is not None and name in _REF_COLUMNS:
             ax.plot(ref['x'], ref[_REF_COLUMNS[name]], '-', color="black",
                     lw=1.5, zorder=3, label='reference')
@@ -188,11 +192,14 @@ def render_shocktube(grids, title="Brio-Wu", limits=None, xlim=None,
     for j in range(n, len(flat)):
         flat[j].axis('off')
 
-    tube_n = "/".join(str(g['n_tube']) for g in gs)
-    res = " | ".join(dict.fromkeys(g['res_label'] for g in gs))
-    fig.suptitle(f"{title}, t={g0['time']:.4f}  (tube N={tube_n})")
-    fig.text(0.98, 0.005, f"Resolution: {res}", fontsize=10, ha='right')
-    plt.tight_layout(rect=[0, 0.02, 1, 0.97])
+    if clean:
+        plt.tight_layout()
+    else:
+        tube_n = "/".join(str(g['n_tube']) for g in gs)
+        res = " | ".join(dict.fromkeys(g['res_label'] for g in gs))
+        fig.suptitle(f"{title}, t={g0['time']:.4f}  (tube N={tube_n})")
+        fig.text(0.98, 0.005, f"Resolution: {res}", fontsize=10, ha='right')
+        plt.tight_layout(rect=[0, 0.02, 1, 0.97])
     return fig
 
 
@@ -209,10 +216,11 @@ def shared_limits(grids):
     return limits
 
 
-def _save_png(fig, fname, step, suffix=""):
+def _save_fig(fig, fname, step, suffix="", clean=False):
     outdir = os.path.dirname(os.path.abspath(fname))
-    outname = os.path.join(outdir, f"shocktube{suffix}_step{step}.png")
-    fig.savefig(outname, dpi=150, bbox_inches='tight')
+    ext = 'pdf' if clean else 'png'
+    outname = os.path.join(outdir, f"shocktube{suffix}_step{step}.{ext}")
+    fig.savefig(outname, dpi=300 if clean else 150, bbox_inches='tight')
     plt.close(fig)
     print(f"Saved: {outname}")
 
@@ -249,18 +257,18 @@ def _gather(fnames, step, y0, z0, thickness, xlim, ref, labels):
 
 def plot_shocktube(fnames, step, y0=None, z0=None, thickness=None,
                    title="Brio-Wu", xlim=None, ref=True, labels=None,
-                   auto_ylim=False):
+                   auto_ylim=False, clean=False):
     fnames = _as_list(fnames)
     grids = _gather(fnames, step, y0, z0, thickness, xlim, ref, labels)
     limits = shared_limits(grids) if auto_ylim else _DEFAULT_LIMITS
-    fig = render_shocktube(grids, title=title, limits=limits, xlim=xlim)
-    _save_png(fig, fnames[0], grids[0]['step'],
-              suffix="_compare" if len(fnames) > 1 else "")
+    fig = render_shocktube(grids, title=title, limits=limits, xlim=xlim, clean=clean)
+    _save_fig(fig, fnames[0], grids[0]['step'],
+              suffix="_compare" if len(fnames) > 1 else "", clean=clean)
 
 
 def plot_all_steps(fnames, steps, y0=None, z0=None, thickness=None,
                    title="Brio-Wu", xlim=None, ref=True, labels=None,
-                   auto_ylim=False):
+                   auto_ylim=False, clean=False):
     """One PNG per step; fixed default y-limits keep frames and runs comparable."""
     fnames = _as_list(fnames)
     per_step = [_gather(fnames, s, y0, z0, thickness, xlim, ref, labels)
@@ -269,8 +277,8 @@ def plot_all_steps(fnames, steps, y0=None, z0=None, thickness=None,
         else _DEFAULT_LIMITS
     suffix = "_compare" if len(fnames) > 1 else ""
     for gs in per_step:
-        fig = render_shocktube(gs, title=title, limits=limits, xlim=xlim)
-        _save_png(fig, fnames[0], gs[0]['step'], suffix=suffix)
+        fig = render_shocktube(gs, title=title, limits=limits, xlim=xlim, clean=clean)
+        _save_fig(fig, fnames[0], gs[0]['step'], suffix=suffix, clean=clean)
 
 
 if __name__ == "__main__":
@@ -318,8 +326,16 @@ if __name__ == "__main__":
                              "comparison ranges")
     parser.add_argument("--title", default="Brio-Wu",
                         help="Plot title prefix (default: 'Brio-Wu')")
+    parser.add_argument("--clean", action="store_true",
+                        help="Publish mode for thesis figures: save PDF instead of PNG, "
+                             "drop the title and resolution label (those go in the "
+                             f"caption), and render text in {CLEAN_FONT} "
+                             "(CLEAN_FONT in _h5_common.py).")
 
     args = parser.parse_args()
+
+    if args.clean:
+        apply_clean_style()
 
     # nargs='+' swallows a trailing step number; pull it back out
     if args.step is None and len(args.files) > 1 \
@@ -337,7 +353,7 @@ if __name__ == "__main__":
     common = dict(y0=args.y0, z0=args.z0, thickness=args.thickness,
                   title=args.title, xlim=tuple(args.xlim) if args.xlim else None,
                   ref=not args.no_ref, labels=args.labels,
-                  auto_ylim=args.auto_ylim)
+                  auto_ylim=args.auto_ylim, clean=args.clean)
 
     if args.all:
         nsteps = min(get_nsteps(f) for f in args.files)

@@ -9,9 +9,6 @@ import matplotlib.pyplot as plt
 from matplotlib.colors import LogNorm
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 
-# Font used for --clean publish figures; change once here.
-CLEAN_FONT = "Times New Roman"
-
 matplotlib.rcParams['xtick.direction'] = 'in'
 matplotlib.rcParams['ytick.direction'] = 'in'
 
@@ -21,7 +18,8 @@ import argparse
 import functools
 from multiprocessing import Pool
 
-from _h5_common import print_metadata, get_nsteps, resolve_field, resolution_label
+from _h5_common import (print_metadata, get_nsteps, resolve_field,
+                        resolution_label, CLEAN_FONT, apply_clean_style)
 
 
 # M4 cubic-spline SPH kernel shape in 3D (q = r/h). The 1/h**3 factor is left
@@ -242,6 +240,12 @@ def render_slice(grids, slice_axis, slice_pos, title,
     # flush with the plot edge (fig.colorbar(ax=ax) leaves a gap there).
     cax = make_axes_locatable(ax).append_axes("right", size="4%", pad=0.08)
     cbar = fig.colorbar(im, cax=cax)
+    # Small/large tick values switch to an offset in scientific notation
+    # (e.g. 0.2..1.2 with a x10^-3 above) instead of 0.0002, 0.0004, ...
+    if not log:
+        cbar.formatter.set_powerlimits((-3, 3))
+        cbar.formatter.set_useMathText(True)
+        cbar.update_ticks()
     cbar.set_label(grids['label'])
     ax.set_xlabel(ha)
     ax.set_ylabel(va)
@@ -396,7 +400,7 @@ if __name__ == "__main__":
                         help="Publish mode for thesis figures: save PDF instead of PNG, "
                              "drop the title and resolution label (those go in the "
                              f"caption), and render text in {CLEAN_FONT} "
-                             "(CLEAN_FONT at the top of this script).")
+                             "(CLEAN_FONT in _h5_common.py).")
     parser.add_argument("--vmin", type=float, default=None,
                         help="Lower colormap limit (default: auto)")
     parser.add_argument("--vmax", type=float, default=None,
@@ -443,12 +447,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     if args.clean:
-        matplotlib.rcParams['font.family'] = 'serif'
-        # Fallbacks for hosts without CLEAN_FONT: Nimbus Roman is the
-        # metric-compatible Times clone shipped on most Linux systems.
-        matplotlib.rcParams['font.serif'] = [CLEAN_FONT, 'Nimbus Roman',
-                                             'Liberation Serif', 'STIXGeneral']
-        matplotlib.rcParams['mathtext.fontset'] = 'stix'
+        apply_clean_style()
 
     if args.info:
         print_metadata(args.file)
