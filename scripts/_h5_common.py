@@ -21,6 +21,9 @@ _RAW_LABELS = {
     'magneto::divB':        r'$\nabla\cdot B$',
     'magneto::alpha_B':     r'$\alpha_B$',
     'magneto::gradB_norm':  r'$|\nabla B|$',
+    'magneto::curlB_x':     r'$(\nabla\times B)_x$',
+    'magneto::curlB_y':     r'$(\nabla\times B)_y$',
+    'magneto::curlB_z':     r'$(\nabla\times B)_z$',
 }
 
 # Derived-field registry: {name: (formula, label, required_raw_fields)}
@@ -44,6 +47,14 @@ def _Bmag(s):
     return np.sqrt(_arr(s, 'magneto::Bx')**2 +
                    _arr(s, 'magneto::By')**2 +
                    _arr(s, 'magneto::Bz')**2)
+
+
+@_derive('curlBmag', r'$|\nabla\times B|$',
+         ['magneto::curlB_x', 'magneto::curlB_y', 'magneto::curlB_z'])
+def _curlBmag(s):
+    return np.sqrt(_arr(s, 'magneto::curlB_x')**2 +
+                   _arr(s, 'magneto::curlB_y')**2 +
+                   _arr(s, 'magneto::curlB_z')**2)
 
 
 @_derive('divBerr', r'$h\,|\nabla\cdot B|/|B|$',

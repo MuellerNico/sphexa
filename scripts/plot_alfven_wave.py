@@ -94,7 +94,7 @@ def render_alfven_wave(fname, step, v_alfven=None):
     B2_line = analytic_b2(x1_line, time_val, v_alfven)
 
     fig, ax = plt.subplots(figsize=(7, 5))
-    ax.scatter(x1, B2, s=4, facecolors='none', edgecolors='black', linewidths=0.4)
+    ax.scatter(x1, B2, s=1, marker='.', color='black', alpha=0.5)
     ax.plot(x1_line, B2_line, color='red', linewidth=1.2)
     ax.set_xlabel("x1")
     ax.set_ylabel("B2")

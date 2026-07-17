@@ -7,6 +7,13 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from matplotlib.colors import LogNorm
+from mpl_toolkits.axes_grid1 import make_axes_locatable
+
+# Font used for --clean publish figures; change once here.
+CLEAN_FONT = "Times New Roman"
+
+matplotlib.rcParams['xtick.direction'] = 'in'
+matplotlib.rcParams['ytick.direction'] = 'in'
 
 import os
 import sys
@@ -33,7 +40,7 @@ def cubic_spline_3d(q):
 # uses the full 3D kernel attenuated by its offset from the plane (not a thin
 # slab), normalized as sum(v*w)/sum(w) so a constant field is reproduced
 # exactly. Returns (xi, yi, field) with xi/yi the cell edges.
-def sph_scatter_to_grid(xs, ys, zoff, hs, values, resolution=256):
+def sph_scatter_to_grid(xs, ys, zoff, hs, values, resolution):
     xmin, xmax = xs.min(), xs.max()
     ymin, ymax = ys.min(), ys.max()
     dx = (xmax - xmin) / resolution
@@ -99,8 +106,8 @@ def _vector_stem(name):
 # Read one step and return a dict of metadata plus the slice data: either an
 # interpolated grid (xi, yi, values) or, with scatter=True, the raw per-particle
 # samples in the slab (xs, ys, values). No plotting here.
-def compute_slice_grids(fname, step, field='rho', resolution=256,
-                        slice_axis='z', slice_pos=0.0, scatter=False,
+def compute_slice_grids(fname, step, field, resolution,
+                        slice_axis, slice_pos, scatter=False,
                         fieldlines=None):
     print(f"Reading step {step} from {fname}...")
     ha, va = _PLOT_AXES[slice_axis]
@@ -179,11 +186,11 @@ def compute_slice_grids(fname, step, field='rho', resolution=256,
 
 
 # Plot a precomputed slice (grid or scatter) and return the figure.
-def render_slice(grids, slice_axis='z', slice_pos=0.0, title=None,
-                 vmin=None, vmax=None, cmap='bone_r', log=False, point_size=1.0,
+def render_slice(grids, slice_axis, slice_pos, title,
+                 vmin, vmax, cmap, log=False, point_size=1.0,
                  n_contours=0, contour_color='black',
                  fieldline_color='black', fieldline_density=1.0,
-                 fieldline_broken=False):
+                 fieldline_broken=False, xlim=None, ylim=None, clean=False):
     ha, va = _PLOT_AXES[slice_axis]
     time_val = grids['time']
     header = title if title is not None else grids['label']
@@ -204,7 +211,8 @@ def render_slice(grids, slice_axis='z', slice_pos=0.0, title=None,
             print("  (field lines skipped: not supported in --scatter mode)")
     else:
         xi, yi, di = grids['xi'], grids['yi'], grids['values']
-        im = ax.pcolormesh(xi, yi, di, cmap=cmap, shading='auto', **color_kw)
+        im = ax.pcolormesh(xi, yi, di, cmap=cmap, shading='auto',
+                           rasterized=True, **color_kw)
         xc = 0.5 * (xi[0, :-1] + xi[0, 1:])
         yc = 0.5 * (yi[:-1, 0] + yi[1:, 0])
         if n_contours > 0:
@@ -226,20 +234,26 @@ def render_slice(grids, slice_axis='z', slice_pos=0.0, title=None,
             ax.text(0.02, 0.98, f"{grids['stream_stem']} field lines",
                     transform=ax.transAxes, va='top', ha='left', fontsize=9,
                     color=fieldline_color)
-    cbar = fig.colorbar(im, ax=ax, shrink=0.8)
+    if xlim is not None:
+        ax.set_xlim(xlim)
+    if ylim is not None:
+        ax.set_ylim(ylim)
+    # append_axes tracks the fixed-aspect host axes, so the colorbar stays
+    # flush with the plot edge (fig.colorbar(ax=ax) leaves a gap there).
+    cax = make_axes_locatable(ax).append_axes("right", size="4%", pad=0.08)
+    cbar = fig.colorbar(im, cax=cax)
     cbar.set_label(grids['label'])
     ax.set_xlabel(ha)
     ax.set_ylabel(va)
-    ax.set_title(f"{header}, t=[{time_val}]  ({slice_axis}={slice_pos:+.4f})")
-
-    fig.text(0.98, 0.02, f"Resolution: {grids['res_label']}", fontsize=10, ha='right')
-    plt.tight_layout()
+    if not clean:
+        ax.set_title(f"{header}, t=[{time_val}]  ({slice_axis}={slice_pos:+.4f})")
+        fig.text(0.98, 0.02, f"Resolution: {grids['res_label']}", fontsize=10, ha='right')
     return fig
 
 
 # Common colormap limits across all grids; explicit vmin/vmax always win. With
 # log=True, auto vmin is the smallest positive value (LogNorm needs vmin > 0).
-def shared_ranges(grids, vmin=None, vmax=None, log=False):
+def shared_ranges(grids, vmin, vmax, log=False):
     if vmin is None:
         if log:
             mins = []
@@ -256,29 +270,30 @@ def shared_ranges(grids, vmin=None, vmax=None, log=False):
     return vmin, vmax
 
 
-def _save_png(fig, fname, step, field, slice_axis, slice_pos, scatter=False):
+def _save_fig(fig, fname, step, field, slice_axis, slice_pos, scatter, clean):
     outdir = os.path.dirname(os.path.abspath(fname))
     short = field.split('::')[-1]
     suffix = '_scatter' if scatter else ''
-    outname = os.path.join(outdir, f"slice_{short}_step{step}_{slice_axis}{slice_pos:+.4f}{suffix}.png")
-    fig.savefig(outname, dpi=150, bbox_inches='tight')
+    ext = 'pdf' if clean else 'png'
+    outname = os.path.join(outdir, f"slice_{short}_step{step}_{slice_axis}{slice_pos:+.4f}{suffix}.{ext}")
+    fig.savefig(outname, dpi=300 if clean else 150, bbox_inches='tight')
     plt.close(fig)
     print(f"Saved: {outname}")
 
 
-# Compute and plot a single slice, saved as PNG.
-def plot_slice(fname, step, field='rho', resolution=256, slice_axis='z',
-               slice_pos=0.0, title=None, vmin=None, vmax=None, cmap='bone_r',
-               log=False, scatter=False, point_size=1.0,
-               n_contours=0, contour_color='black',
-               fieldlines=None, fieldline_color='black', fieldline_density=1.0,
-               fieldline_broken=False):
+# Compute and plot a single slice, saved as PNG (PDF with clean=True).
+def plot_slice(fname, step, field, resolution, slice_axis,
+               slice_pos, title, vmin, vmax, cmap,
+               log, scatter, point_size,
+               n_contours, contour_color,
+               fieldlines, fieldline_color, fieldline_density,
+               fieldline_broken, xlim, ylim, clean):
     g = compute_slice_grids(fname, step, field, resolution, slice_axis, slice_pos,
                             scatter, fieldlines)
     fig = render_slice(g, slice_axis, slice_pos, title, vmin, vmax, cmap, log, point_size,
                        n_contours, contour_color, fieldline_color, fieldline_density,
-                       fieldline_broken)
-    _save_png(fig, fname, step, field, slice_axis, slice_pos, scatter)
+                       fieldline_broken, xlim, ylim, clean)
+    _save_fig(fig, fname, step, field, slice_axis, slice_pos, scatter, clean)
 
 
 # Map func over items, fanning out across `jobs` worker processes (serial when
@@ -295,22 +310,24 @@ def _pmap(jobs, func, items):
 # scale path where ranges are known only after every grid is computed.
 def _render_save(g, fname, field, slice_axis, slice_pos, title, vmin, vmax,
                  cmap, log, point_size, n_contours, contour_color, scatter,
-                 fieldline_color, fieldline_density, fieldline_broken):
+                 fieldline_color, fieldline_density, fieldline_broken, xlim, ylim,
+                 clean):
     fig = render_slice(g, slice_axis, slice_pos, title, vmin, vmax, cmap, log,
                        point_size, n_contours, contour_color,
-                       fieldline_color, fieldline_density, fieldline_broken)
-    _save_png(fig, fname, g['step'], field, slice_axis, slice_pos, scatter)
+                       fieldline_color, fieldline_density, fieldline_broken,
+                       xlim, ylim, clean)
+    _save_fig(fig, fname, g['step'], field, slice_axis, slice_pos, scatter, clean)
 
 
 # One PNG per step. With shared_scale (default) a single colormap range spans
 # all of them; otherwise each frame is auto-scaled to its own min/max. Explicit
 # vmin/vmax always apply in either mode. jobs > 1 fans steps out over processes.
-def plot_all_steps(fname, steps, field='rho', resolution=256, slice_axis='z',
-                   slice_pos=0.0, title=None, vmin=None, vmax=None, cmap='bone_r',
-                   log=False, scatter=False, point_size=1.0,
-                   n_contours=0, contour_color='black',
-                   fieldlines=None, fieldline_color='black', fieldline_density=1.0,
-                   fieldline_broken=False, shared_scale=True, jobs=1):
+def plot_all_steps(fname, steps, field, resolution, slice_axis,
+                   slice_pos, title, vmin, vmax, cmap,
+                   log, scatter, point_size,
+                   n_contours, contour_color,
+                   fieldlines, fieldline_color, fieldline_density,
+                   fieldline_broken, xlim, ylim, clean, shared_scale, jobs):
     # No shared range needed: compute+render+save each step independently.
     if not shared_scale:
         worker = functools.partial(plot_slice, fname, field=field, resolution=resolution,
@@ -320,7 +337,8 @@ def plot_all_steps(fname, steps, field='rho', resolution=256, slice_axis='z',
                                    contour_color=contour_color, fieldlines=fieldlines,
                                    fieldline_color=fieldline_color,
                                    fieldline_density=fieldline_density,
-                                   fieldline_broken=fieldline_broken)
+                                   fieldline_broken=fieldline_broken, xlim=xlim, ylim=ylim,
+                                   clean=clean)
         _pmap(jobs, worker, steps)
         return
 
@@ -337,7 +355,8 @@ def plot_all_steps(fname, steps, field='rho', resolution=256, slice_axis='z',
                                contour_color=contour_color, scatter=scatter,
                                fieldline_color=fieldline_color,
                                fieldline_density=fieldline_density,
-                               fieldline_broken=fieldline_broken)
+                               fieldline_broken=fieldline_broken, xlim=xlim, ylim=ylim,
+                               clean=clean)
     _pmap(jobs, render, grids)
 
 
@@ -373,10 +392,20 @@ if __name__ == "__main__":
                         help="Interpolation grid resolution per side (default: 256)")
     parser.add_argument("--title", default=None,
                         help="Plot title prefix (default: field label)")
+    parser.add_argument("--clean", action="store_true",
+                        help="Publish mode for thesis figures: save PDF instead of PNG, "
+                             "drop the title and resolution label (those go in the "
+                             f"caption), and render text in {CLEAN_FONT} "
+                             "(CLEAN_FONT at the top of this script).")
     parser.add_argument("--vmin", type=float, default=None,
                         help="Lower colormap limit (default: auto)")
     parser.add_argument("--vmax", type=float, default=None,
                         help="Upper colormap limit (default: auto)")
+    parser.add_argument("--xlim", type=float, nargs=2, default=None, metavar=("LO", "HI"),
+                        help="Crop the horizontal plot axis to [LO, HI]. Useful for the "
+                             "2:1 advection-loop box to show only the central square.")
+    parser.add_argument("--ylim", type=float, nargs=2, default=None, metavar=("LO", "HI"),
+                        help="Crop the vertical plot axis to [LO, HI] (default: auto)")
     parser.add_argument("--shared-scale", action=argparse.BooleanOptionalAction, default=True,
                         help="With --all, share one colormap range across every frame "
                              "(default: on). Use --no-shared-scale for per-frame auto-scaling.")
@@ -413,6 +442,14 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
+    if args.clean:
+        matplotlib.rcParams['font.family'] = 'serif'
+        # Fallbacks for hosts without CLEAN_FONT: Nimbus Roman is the
+        # metric-compatible Times clone shipped on most Linux systems.
+        matplotlib.rcParams['font.serif'] = [CLEAN_FONT, 'Nimbus Roman',
+                                             'Liberation Serif', 'STIXGeneral']
+        matplotlib.rcParams['mathtext.fontset'] = 'stix'
+
     if args.info:
         print_metadata(args.file)
         sys.exit(0)
@@ -431,7 +468,8 @@ if __name__ == "__main__":
                   n_contours=args.contours, contour_color=args.contour_color,
                   fieldlines=fieldlines, fieldline_color=args.fieldline_color,
                   fieldline_density=args.fieldline_density,
-                  fieldline_broken=args.fieldline_broken)
+                  fieldline_broken=args.fieldline_broken,
+                  xlim=args.xlim, ylim=args.ylim, clean=args.clean)
 
     if args.all:
         nsteps = get_nsteps(args.file)
