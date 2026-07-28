@@ -79,11 +79,11 @@ mhdSLRCorrection(cstone::Vec3<Tc> R, Tc eta_ab, T eta_crit, T balsi, T balsj, cs
 
     // κ_ab (Eq. 14)
     T kappa_ab = T(1);
-    // if (eta_ab < eta_crit) // force limiter to zero for anomalously close particle pairs (needed in mhd???)
-    // {
-    //     T etaDiff = T(q_fold_inv) * T(eta_ab - eta_crit);
-    //     kappa_ab  = std::exp(-etaDiff * etaDiff);
-    // }
+    if (eta_ab < eta_crit) // force limiter to zero for anomalously close particle pairs
+    {
+        T etaDiff = T(q_fold_inv) * T(eta_ab - eta_crit);
+        kappa_ab  = std::exp(-etaDiff * etaDiff);
+    }
 
     T F_ab   = (RJBR_b != T(0)) ? RJBR_a / RJBR_b : T(0); // Eq. 17
     T F_abp1 = T(1) + F_ab;
