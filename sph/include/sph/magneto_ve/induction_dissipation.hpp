@@ -56,7 +56,8 @@ void computeInductionAndDissipation(const GroupView& grp, SimulationData& sim, c
             md.dBydy.data(), md.dBydz.data(), md.dBzdx.data(), md.dBzdy.data(), md.dBzdz.data(), md.dvxdx.data(),
             md.dvxdy.data(), md.dvxdz.data(), md.dvydx.data(), md.dvydy.data(), md.dvydz.data(), md.dvzdx.data(),
             md.dvzdy.data(), md.dvzdz.data(), md.divB.data(), d.wh.data(), md.dBx.data(), md.dBy.data(), md.dBz.data(),
-            d.du.data(), md.d_psi_ch.data());
+            d.du.data(), md.d_psi_ch.data(), md.dB_diss_x.data(), md.dB_diss_y.data(), md.dB_diss_z.data(),
+            md.du_diss.data());
     }
 }
 

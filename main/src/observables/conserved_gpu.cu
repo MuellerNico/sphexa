@@ -169,4 +169,18 @@ EMAG(double, double);
 EMAG(double, float);
 EMAG(float, float);
 
+//! @brief total resistive heating rate Sum_i m_i * du_diss_i
+template<class Tm, class Th>
+double magneticDissipationGpu(const Tm* m, const Th* du_diss, size_t first, size_t last)
+{
+    return thrust::inner_product(thrust::device, m + first, m + last, du_diss + first, 0.0);
+}
+
+#define MAG_DISS(Tm, Th) \
+    template double magneticDissipationGpu(const Tm* m, const Th* du_diss, size_t first, size_t last);
+
+MAG_DISS(double, double);
+MAG_DISS(float, double);
+MAG_DISS(float, float);
+
 } // namespace sphexa

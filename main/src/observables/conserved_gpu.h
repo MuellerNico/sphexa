@@ -76,4 +76,13 @@ extern std::tuple<double, double, double> magneticEnergyGpu(Tc mu_0, const Th* x
                                                             const Th* h, const Tc* Bx, const Tc* By, const Tc* Bz,
                                                             size_t first, size_t last);
 
+/*! @brief total resistive heating rate Sum_i m_i * du_diss_i on the GPU
+ *
+ * @param m        particle masses
+ * @param du_diss  per-particle resistive specific heating rate (du/dt)
+ * @return         mass-weighted sum over [first, last)
+ */
+template<class Tm, class Th>
+extern double magneticDissipationGpu(const Tm* m, const Th* du_diss, size_t first, size_t last);
+
 } // namespace sphexa

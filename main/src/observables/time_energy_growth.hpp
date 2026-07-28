@@ -137,7 +137,8 @@ public:
             if (md.isAllocated("Bx"))
             {
                 fileutils::writeColumns(constantsFile, ' ', d.iteration, d.ttot, d.minDt, d.etot, d.ecin, d.eint,
-                                        d.egrav, d.linmom, d.angmom, md.eMag, md.meanDivBError, md.maxDivBError, khgr);
+                                        d.egrav, d.linmom, d.angmom, md.eMag, md.meanDivBError, md.maxDivBError,
+                                        md.resHeating, khgr);
             }
             else
             {

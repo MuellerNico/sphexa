@@ -112,25 +112,29 @@ auto localMagneticEnergy(size_t first, size_t last, const Dataset& simData)
     auto& md = simData.magneto;
     auto& d  = simData.hydro;
 
-    const auto* divB = md.divB.data();
-    const auto* h    = d.h.data();
-    const auto* kx   = d.kx.data();
-    const auto* xm   = d.xm.data();
-    const auto* Bx   = md.Bx.data();
-    const auto* By   = md.By.data();
-    const auto* Bz   = md.Bz.data();
-    const auto  mu_0 = md.mu_0;
+    const auto* divB    = md.divB.data();
+    const auto* h       = d.h.data();
+    const auto* kx      = d.kx.data();
+    const auto* xm      = d.xm.data();
+    const auto* Bx      = md.Bx.data();
+    const auto* By      = md.By.data();
+    const auto* Bz      = md.Bz.data();
+    const auto* m       = d.m.data();
+    const auto* du_diss = md.du_diss.data();
+    const auto  mu_0    = md.mu_0;
 
     double eMag                = 0.0;
     double cumulativeDivBError = 0.0;
     double maxDivBError        = 0.0;
-#pragma omp parallel for reduction(+ : eMag, cumulativeDivBError)
+    double resHeating          = 0.0;
+#pragma omp parallel for reduction(+ : eMag, cumulativeDivBError, resHeating)
     for (size_t i = first; i < last; i++)
     {
         double Bsq = Bx[i] * Bx[i] + By[i] * By[i] + Bz[i] * Bz[i];
         // The volume of particle i is given as xm[i]/kx[i]
         eMag += Bsq * xm[i] / kx[i];
         if (Bsq > 0) { cumulativeDivBError += h[i] * abs(divB[i]) / sqrt(Bsq); }
+        resHeating += m[i] * du_diss[i];
     }
 
 #pragma omp parallel for reduction(max : maxDivBError)
@@ -141,7 +145,7 @@ auto localMagneticEnergy(size_t first, size_t last, const Dataset& simData)
         if (localDivBError > maxDivBError) { maxDivBError = localDivBError; }
     }
 
-    return std::make_tuple(0.5 * eMag / mu_0, cumulativeDivBError, maxDivBError);
+    return std::make_tuple(0.5 * eMag / mu_0, cumulativeDivBError, maxDivBError, resHeating);
 }
 
 /*! @brief Computation of globally conserved quantities
@@ -157,6 +161,7 @@ void computeConservedQuantities(size_t startIndex, size_t endIndex, Dataset& sim
 {
     double               eKin, eInt;
     double               eMag = 0.0, cumulativeDivBError = 0.0, localMaxDivBError = 0.0;
+    double               localResHeating = 0.0;
     cstone::Vec3<double> linmom, angmom;
     size_t               ncsum = 0;
 
@@ -175,6 +180,7 @@ void computeConservedQuantities(size_t startIndex, size_t endIndex, Dataset& sim
             std::tie(eMag, cumulativeDivBError, localMaxDivBError) =
                 magneticEnergyGpu(md.mu_0, rawPtr(d.xm), rawPtr(d.kx), rawPtr(md.divB), rawPtr(d.h), rawPtr(md.Bx),
                                   rawPtr(md.By), rawPtr(md.Bz), startIndex, endIndex);
+            localResHeating = magneticDissipationGpu(rawPtr(d.m), rawPtr(md.du_diss), startIndex, endIndex);
         }
     }
     else
@@ -191,12 +197,13 @@ void computeConservedQuantities(size_t startIndex, size_t endIndex, Dataset& sim
         std::tie(eKin, eInt, linmom, angmom) = localConservedQuantities(startIndex, endIndex, d);
         if (md.Bx.size() == d.x.size())
         {
-            std::tie(eMag, cumulativeDivBError, localMaxDivBError) = localMagneticEnergy(startIndex, endIndex, simData);
+            std::tie(eMag, cumulativeDivBError, localMaxDivBError, localResHeating) =
+                localMagneticEnergy(startIndex, endIndex, simData);
         }
     }
     d.localNeighbors = ncsum;
 
-    util::array<double, 13> quantities, globalQuantities;
+    util::array<double, 14> quantities, globalQuantities;
     std::fill(globalQuantities.begin(), globalQuantities.end(), double(0));
 
     quantities[0]  = eKin;
@@ -212,6 +219,7 @@ void computeConservedQuantities(size_t startIndex, size_t endIndex, Dataset& sim
     quantities[10] = double(endIndex - startIndex);
     quantities[11] = eMag;
     quantities[12] = cumulativeDivBError;
+    quantities[13] = localResHeating;
 
     MPI_Reduce(quantities.data(), globalQuantities.data(), quantities.size(), MpiType<double>{}, MPI_SUM, 0, comm);
 
@@ -231,6 +239,7 @@ void computeConservedQuantities(size_t startIndex, size_t endIndex, Dataset& sim
     md.eMag                  = globalQuantities[11];
     md.meanDivBError         = globalQuantities[12] / d.numParticlesGlobal;
     md.maxDivBError          = globalMaxDivBErr;
+    md.resHeating            = globalQuantities[13];
     d.etot                   = d.ecin + d.eint + d.egrav + md.eMag;
 }
 

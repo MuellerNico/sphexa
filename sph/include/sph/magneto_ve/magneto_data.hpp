@@ -87,6 +87,8 @@ public:
 
     // Observables
     RealType eMag{0.0}, meanDivBError{0.0}, maxDivBError{0.0};
+    // Total resistive heating rate dE_int/dt.
+    RealType resHeating{0.0};
 
      /*! @brief
      * Name of each field as string for use e.g in HDF5 output. Order has to correspond to what's returned by data().
@@ -120,6 +122,10 @@ public:
     FieldVector<HydroType> dBydx, dBydy, dBydz;
     FieldVector<HydroType> dBzdx, dBzdy, dBzdz;
 
+    // Diagnostic fields for dissipation-scheme studies
+    FieldVector<RealType> dB_diss_x, dB_diss_y, dB_diss_z;
+    FieldVector<RealType> du_diss;
+
     /* Is this a good idea?
      *
      * //! @brief returns external magnetic field contribtion at @p pos and @p time
@@ -138,7 +144,8 @@ public:
         "Bx",     "By",       "Bz",          "dBx",   "dBy",     "dBz",     "dBx_m1", "dBy_m1", "dBz_m1",
         "psi_ch", "d_psi_ch", "d_psi_ch_m1", "dvxdx", "dvxdy",   " dvxdz",  "dvydx",  "dvydy",  "dvydz",
         "dvzdx",  "dvzdy",    "dvzdz",       "divB",  "curlB_x", "curlB_y", "curlB_z", "gradB_norm", "alpha_B",
-        "dBxdx",  "dBxdy",    "dBxdz",       "dBydx", "dBydy",   "dBydz",   "dBzdx",  "dBzdy",  "dBzdz"};
+        "dBxdx",  "dBxdy",    "dBxdz",       "dBydx", "dBydy",   "dBydz",   "dBzdx",  "dBzdy",  "dBzdz",
+        "dB_diss_x", "dB_diss_y", "dB_diss_z", "du_diss"};
 
     static const inline std::string prefix{"magneto::"};
 
@@ -150,7 +157,8 @@ public:
     {
         auto ret = std::tie(Bx, By, Bz, dBx, dBy, dBz, dBx_m1, dBy_m1, dBz_m1, psi_ch, d_psi_ch, d_psi_ch_m1, dvxdx,
                             dvxdy, dvxdz, dvydx, dvydy, dvydz, dvzdx, dvzdy, dvzdz, divB, curlB_x, curlB_y, curlB_z,
-                            gradB_norm, alpha_B, dBxdx, dBxdy, dBxdz, dBydx, dBydy, dBydz, dBzdx, dBzdy, dBzdz);
+                            gradB_norm, alpha_B, dBxdx, dBxdy, dBxdz, dBydx, dBydy, dBydz, dBzdx, dBzdy, dBzdz,
+                            dB_diss_x, dB_diss_y, dB_diss_z, du_diss);
 
 #if defined(__clang__) || __GNUC__ > 11
         static_assert(std::tuple_size_v<decltype(ret)> == fieldNames.size());

@@ -81,7 +81,7 @@ protected:
     using DependentFieldsMagneto =
         FieldList<"dvxdx", "dvxdy", " dvxdz", "dvydx", "dvydy", "dvydz", "dvzdx", "dvzdy", "dvzdz", "divB", "curlB_x",
                   "curlB_y", "curlB_z", "gradB_norm", "alpha_B", "dBxdx", "dBxdy", "dBxdz", "dBydx", "dBydy", "dBydz",
-                  "dBzdx", "dBzdy", "dBzdz">;
+                  "dBzdx", "dBzdy", "dBzdz", "dB_diss_x", "dB_diss_y", "dB_diss_z", "du_diss">;
 
 public:
     MagnetoHydroProp(std::ostream& output, size_t rank, bool AVswitches)

@@ -204,7 +204,14 @@ struct InductionAndDissipationPostamble
         T tau_Inv   = (sigma_c * ch) / hi;
         T d_psi_ch_out = -ch * divBi - psi_ch_i * (tau_Inv + (dvxdxi + dvydyi + dvzdzi) / T(2));
 
-        return std::make_tuple(dBxi, dByi, dBzi, du_out, d_psi_ch_out);
+        // Diagnostic outputs: resistive dB/dt and resistive heating
+        Tc dB_diss_out_x = K * dB_diss_x;
+        Tc dB_diss_out_y = K * dB_diss_y;
+        Tc dB_diss_out_z = K * dB_diss_z;
+        Tc du_diss_out   = -T(0.5) * K / rhoi * du_diss;
+
+        return std::make_tuple(dBxi, dByi, dBzi, du_out, d_psi_ch_out, dB_diss_out_x, dB_diss_out_y, dB_diss_out_z,
+                               du_diss_out);
     }
 };
 
@@ -217,13 +224,14 @@ void inductionAndDissipationIjLoop(
     const T* psi_ch, const unsigned* nc, const T* dBxdx, const T* dBxdy, const T* dBxdz, const T* dBydx,
     const T* dBydy, const T* dBydz, const T* dBzdx, const T* dBzdy, const T* dBzdz, const T* dvxdx, const T* dvxdy,
     const T* dvxdz, const T* dvydx, const T* dvydy, const T* dvydz, const T* dvzdx, const T* dvzdy, const T* dvzdz,
-    const T* divB, const T* wh, Tc* dBx_dt, Tc* dBy_dt, Tc* dBz_dt, Tc* du, T* d_psi_ch)
+    const T* divB, const T* wh, Tc* dBx_dt, Tc* dBy_dt, Tc* dBz_dt, Tc* du, T* d_psi_ch, Tc* dB_diss_x,
+    Tc* dB_diss_y, Tc* dB_diss_z, Tc* du_diss)
 {
     const auto input =
         std::make_tuple(vx, vy, vz, c, Bx, By, Bz, m, xm, kx, gradh, c11, c12, c13, c22, c23, c33, alpha_B, psi_ch, nc,
                         dBxdx, dBxdy, dBxdz, dBydx, dBydy, dBydz, dBzdx, dBzdy, dBzdz, dvxdx, dvxdy, dvxdz, dvydx,
                         dvydy, dvydz, dvzdx, dvzdy, dvzdz, divB, du);
-    const auto output = std::make_tuple(dBx_dt, dBy_dt, dBz_dt, du, d_psi_ch);
+    const auto output = std::make_tuple(dBx_dt, dBy_dt, dBz_dt, du, d_psi_ch, dB_diss_x, dB_diss_y, dB_diss_z, du_diss);
     neighborhood.ijLoop(input, output, InductionAndDissipationInteraction<T>{wh, T(mu_0), arFloor, scheme},
                         InductionAndDissipationPostamble<T, Tc>{K, T(mu_0)});
 }
