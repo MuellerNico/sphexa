@@ -48,6 +48,8 @@ InitSettings MhdLoopConstants()
             // Wissing script: 0.1*sqrt(5) ≈ 0.224. Paper text: 0.1/sqrt(5) ≈ 0.045. Canonical Gardiner-Stone: 0.
             {"vz", 0.1 * std::sqrt(5.0)},
             {"L", 1.0},
+            // grid variant: 1 = FCC lattice (default), 0 = simple cubic
+            {"fccLattice", 1.0},
             {"gamma", 5.0 / 3.0},
             {"mui", 10.},
             {"Kcour", 0.2},
@@ -288,22 +290,27 @@ public:
         T rhoOut       = settings_.at("rhoOut");
         T densityRatio = rhoIn / rhoOut;
 
-        // -n is the number of lattice planes per length L, matching the effective glass resolution
-        // for the same -n. Thin box in z with a fixed 12-plane extent instead of the glass
-        // version's one-block layer.
-        size_t ny   = cbrtNumPart;
-        size_t nz   = 12;
-        T      step = L / ny;
-        T      Lz   = nz * step;
+        bool fcc = settings_.at("fccLattice") != 0.0;
+
+        // -n keeps its glass meaning of effective particles per length L: the per-particle
+        // volume is (L/n)^3 for every lattice type. An FCC cell of size a holds 4 particles,
+        // hence a = cbrt(4) L/n. Thin box in z with a fixed 12-plane extent
+        size_t ny           = cbrtNumPart;
+        size_t partsPerCell = fcc ? 4 : 1;
+        size_t cy = fcc ? std::max<size_t>(std::lround(ny / std::cbrt(4.0)), 1) : ny;
+        size_t cz = fcc ? 6 : 12;
+        T      cellSize     = L / cy;
+        T      Lz           = cz * cellSize;
 
         cstone::Box<T>       globalBox(-L, L, -L / 2, L / 2, 0, Lz, pbc, pbc, pbc);
-        cstone::Vec3<size_t> outerSide{2 * ny, ny, nz};
+        cstone::Vec3<size_t> outerSide{2 * cy, cy, cz};
 
-        size_t numOuter    = outerSide[0] * outerSide[1] * outerSide[2];
+        size_t numOuter    = partsPerCell * outerSide[0] * outerSide[1] * outerSide[2];
         auto [first, last] = partitionRange(numOuter, rank, numRanks);
 
         std::vector<T> x(last - first), y(last - first), z(last - first);
-        regularGrid(globalBox, outerSide, first, last, x, y, z);
+        if (fcc) { fccGrid(globalBox, outerSide, first, last, x, y, z); }
+        else { regularGrid(globalBox, outerSide, first, last, x, y, z); }
 
         if (densityRatio != T(1))
         {
@@ -321,13 +328,14 @@ public:
             }
 
             cstone::Box<T>       innerBox(-halfA, halfA, -halfA, halfA, 0, Lz, pbc, pbc, pbc);
-            cstone::Vec3<size_t> innerSide{ny, ny, nz};
+            cstone::Vec3<size_t> innerSide{cy, cy, cz};
 
-            size_t numInner        = innerSide[0] * innerSide[1] * innerSide[2];
+            size_t numInner        = partsPerCell * innerSide[0] * innerSide[1] * innerSide[2];
             auto [firstIn, lastIn] = partitionRange(numInner, rank, numRanks);
 
             std::vector<T> xIn(lastIn - firstIn), yIn(lastIn - firstIn), zIn(lastIn - firstIn);
-            regularGrid(innerBox, innerSide, firstIn, lastIn, xIn, yIn, zIn);
+            if (fcc) { fccGrid(innerBox, innerSide, firstIn, lastIn, xIn, yIn, zIn); }
+            else { regularGrid(innerBox, innerSide, firstIn, lastIn, xIn, yIn, zIn); }
 
             auto keepCyl = [R0](auto u, auto v, auto) { return u * u + v * v < R0 * R0; };
             selectParticles(xIn, yIn, zIn, keepCyl);

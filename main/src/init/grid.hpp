@@ -180,6 +180,58 @@ void regularGrid(const cstone::Box<T>& box, cstone::Vec3<size_t> side, size_t fi
     }
 }
 
+/*! @brief create a face-centered cubic lattice spanning an arbitrary box, with per-dimension cell counts
+ *
+ * @tparam     T      float or double
+ * @tparam     Vector
+ * @param[in]  box    coordinate bounds of the lattice
+ * @param[in]  cells  number of FCC unit cells along each dimension {x, y, z}
+ * @param[in]  first  index in [0, 4*cells[0]*cells[1]*cells[2]] of first particle to add to x,y,z
+ * @param[in]  last   index in [first, 4*cells[0]*cells[1]*cells[2]] of last particle to add to x,y,z
+ * @param[out] x      output coordinates, length = last - first
+ * @param[out] y
+ * @param[out] z
+ *
+ * Each unit cell holds the 4-point FCC basis, so there are 4*cells[0]*cells[1]*cells[2]
+ * particles in total and two particle planes per cell along each axis. Unlike hexagonal
+ * close-packing, the cubic FCC cell tiles any box with integer cell counts periodically.
+ */
+template<class T, class Vector>
+void fccGrid(const cstone::Box<T>& box, cstone::Vec3<size_t> cells, size_t first, size_t last, Vector& x, Vector& y,
+             Vector& z)
+{
+    constexpr double basis[4][3] = {
+        {0.25, 0.25, 0.25}, {0.25, 0.75, 0.75}, {0.75, 0.25, 0.75}, {0.75, 0.75, 0.25}};
+
+    double stepX = box.lx() / cells[0];
+    double stepY = box.ly() / cells[1];
+    double stepZ = box.lz() / cells[2];
+
+    size_t particlesPerSlab = 4 * cells[0] * cells[1];
+
+#pragma omp parallel for
+    for (size_t i = first / particlesPerSlab; i < last / particlesPerSlab + 1; ++i)
+    {
+        for (size_t j = 0; j < cells[1]; ++j)
+        {
+            for (size_t k = 0; k < cells[0]; ++k)
+            {
+                for (size_t b = 0; b < 4; ++b)
+                {
+                    size_t pindex = 4 * ((i * cells[1] + j) * cells[0] + k) + b;
+
+                    if (first <= pindex && pindex < last)
+                    {
+                        x[pindex - first] = box.xmin() + (k + basis[b][0]) * stepX;
+                        y[pindex - first] = box.ymin() + (j + basis[b][1]) * stepY;
+                        z[pindex - first] = box.zmin() + (i + basis[b][2]) * stepZ;
+                    }
+                }
+            }
+        }
+    }
+}
+
 /*! @brief intersection of a box with a regular grid
  *
  * @tparam T   float or double
