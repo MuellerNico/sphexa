@@ -28,6 +28,9 @@
  */
 
 #pragma once
+#include <cstdint>
+#include <cstring>
+
 #include "isim_init.hpp"
 #include "cstone/sfc/box.hpp"
 #include "early_sync.hpp"
@@ -45,6 +48,8 @@ InitSettings ALfvenWaveConstants()
             {"gamma", 5. / 3.},    {"Kcour", 0.2},
             {"ng0", 150},          {"ngmax", 200},
             {"minDt", 1e-7},       {"minDt_m1", 1e-7},
+            // white-noise perturbation amplitude (rms per B component; 0 = off)
+            {"noiseAmp", 0.},
             {"gravConstant", 0.0}, {"alfven-wave", 1.0}};
 }
 
@@ -69,6 +74,45 @@ static cstone::Vec3<cstone::Vec3<T>> coordinateTransformToRotated(T sinA, T sinB
     return {a, b, c};
 }
 
+//! @brief splitmix64 bit scrambler
+static inline uint64_t splitmix64(uint64_t v)
+{
+    v += 0x9e3779b97f4a7c15ull;
+    v = (v ^ (v >> 30)) * 0xbf58476d1ce4e5b9ull;
+    v = (v ^ (v >> 27)) * 0x94d049bb133111ebull;
+    return v ^ (v >> 31);
+}
+
+/*! @brief six standard gaussians, deterministic in the position bits (Box-Muller)
+ *
+ * Seeding from the coordinates for reproducibility
+ */
+template<class T>
+static util::array<T, 6> positionHashGaussians(T x, T y, T z)
+{
+    auto bits = [](T v)
+    {
+        uint64_t u = 0;
+        std::memcpy(&u, &v, sizeof(v));
+        return u;
+    };
+    uint64_t s = splitmix64(bits(x) ^ splitmix64(bits(y) ^ splitmix64(bits(z))));
+
+    util::array<T, 6> g;
+    for (int p = 0; p < 3; ++p)
+    {
+        s    = splitmix64(s);
+        T u1 = T((s >> 11) + 1) * T(0x1.0p-53); // (0,1], log-safe
+        s    = splitmix64(s);
+        T u2 = T(s >> 11) * T(0x1.0p-53);
+        T r  = std::sqrt(T(-2) * std::log(u1));
+
+        g[2 * p]     = r * std::cos(T(2. * M_PI) * u2);
+        g[2 * p + 1] = r * std::sin(T(2. * M_PI) * u2);
+    }
+    return g;
+}
+
 template<class T, class SimData>
 void initAlfvenWaveFields(SimData& sim, const std::map<std::string, double>& constants, T massPart)
 {
@@ -81,8 +125,9 @@ void initAlfvenWaveFields(SimData& sim, const std::map<std::string, double>& con
     using XM           = typename std::decay_t<decltype(d)>::XM1Type;
     using Tmass        = typename std::decay_t<decltype(d)>::Tmass;
 
-    T sinA   = constants.at("sinA");
-    T sinB   = constants.at("sinB");
+    T sinA     = constants.at("sinA");
+    T sinB     = constants.at("sinB");
+    T noiseAmp = constants.at("noiseAmp");
     T cosA   = std::sqrt(1. - sinA * sinA);
     T cosB   = std::sqrt(1. - sinB * sinB);
     T lambda = constants.at("lambda");
@@ -145,6 +190,18 @@ void initAlfvenWaveFields(SimData& sim, const std::map<std::string, double>& con
         Bx[i] = dot(coordinateTransformToCartesian(sinA, sinB)[0], Brot);
         By[i] = dot(coordinateTransformToCartesian(sinA, sinB)[1], Brot);
         Bz[i] = dot(coordinateTransformToCartesian(sinA, sinB)[2], Brot);
+
+        if (noiseAmp > T(0))
+        {
+            auto g    = positionHashGaussians(T(x[i]), T(y[i]), T(z[i]));
+            T    vAmp = noiseAmp / std::sqrt(md.mu_0 * rho);
+            Bx[i] += RT(noiseAmp * g[0]);
+            By[i] += RT(noiseAmp * g[1]);
+            Bz[i] += RT(noiseAmp * g[2]);
+            vx[i] += HT(vAmp * g[3]);
+            vy[i] += HT(vAmp * g[4]);
+            vz[i] += HT(vAmp * g[5]);
+        }
 
         x_m1[i] = vx[i] * d.minDt;
         y_m1[i] = vy[i] * d.minDt;
