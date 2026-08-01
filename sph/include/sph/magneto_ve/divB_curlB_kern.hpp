@@ -102,10 +102,9 @@ struct DivBCurlBPostamble
         T hiInv3   = hiInv * hiInv * hiInv;
         T norm_kxi = K * hiInv3 / (kxi * gradhi);
 
-        // Conservative (energy-conjugate) divergence for the constrained-cleaning psi source (exact
-        // transpose of grad-psi operator under magnetic-energy norm V = xm/kx). Uses the self volume
-        // element xm[i] and drops the 1/kx. Assumes equal particle masses.
-        T divB = K * hiInv3 * xmassi / gradhi * divBcons;
+        // energy-conjugate op for the cleaning psi source: exact transpose of grad-psi under the
+        // magnetic-energy norm V = xm/kx. Not consistent for linear B, equal masses assumed.
+        T divB_conj = K * hiInv3 * xmassi / gradhi * divBcons;
 
         T curlB_x = norm_kxi * (dBzy - dByz);
         T curlB_y = norm_kxi * (dBxz - dBzx);
@@ -124,6 +123,8 @@ struct DivBCurlBPostamble
         T dBzdy = norm_kxi * dBzy;
         T dBzdz = norm_kxi * dBzz;
 
+        T divB = dBxdx + dBydy + dBzdz;
+
         T alpha_B;
         if (scheme == ResistivityScheme::Constant) { alpha_B = alpha_B_const; }
         else if (scheme == ResistivityScheme::SLR || scheme == ResistivityScheme::SLRB ||
@@ -141,21 +142,21 @@ struct DivBCurlBPostamble
             alpha_B = alpha_Bi;
         }
 
-        return std::make_tuple(divB, curlB_x, curlB_y, curlB_z, gradB_norm, alpha_B, dBxdx, dBxdy, dBxdz, dBydx, dBydy,
-                               dBydz, dBzdx, dBzdy, dBzdz);
+        return std::make_tuple(divB, divB_conj, curlB_x, curlB_y, curlB_z, gradB_norm, alpha_B, dBxdx, dBxdy, dBxdz,
+                               dBydx, dBydy, dBydz, dBzdx, dBzdy, dBzdz);
     }
 };
 
 template<class Neighborhood, class Tc, class T>
 void divBCurlBIjLoop(Neighborhood const& neighborhood, Tc K, const Tc* Bx, const Tc* By, const Tc* Bz, const T* kx,
                      const T* xm, const T* c11, const T* c12, const T* c13, const T* c22, const T* c23, const T* c33,
-                     const T* gradh, const T* wh, T* divB, T* curlB_x, T* curlB_y, T* curlB_z, T* gradB_norm,
-                     T* alpha_B, T* dBxdx, T* dBxdy, T* dBxdz, T* dBydx, T* dBydy, T* dBydz, T* dBzdx, T* dBzdy,
-                     T* dBzdz, ResistivityScheme scheme, Tc alpha_B_const)
+                     const T* gradh, const T* wh, T* divB, T* divB_conj, T* curlB_x, T* curlB_y, T* curlB_z,
+                     T* gradB_norm, T* alpha_B, T* dBxdx, T* dBxdy, T* dBxdz, T* dBydx, T* dBydy, T* dBydz, T* dBzdx,
+                     T* dBzdy, T* dBzdz, ResistivityScheme scheme, Tc alpha_B_const)
 {
     const auto input  = std::make_tuple(Bx, By, Bz, kx, xm, c11, c12, c13, c22, c23, c33, gradh);
-    const auto output = std::make_tuple(divB, curlB_x, curlB_y, curlB_z, gradB_norm, alpha_B, dBxdx, dBxdy, dBxdz,
-                                        dBydx, dBydy, dBydz, dBzdx, dBzdy, dBzdz);
+    const auto output = std::make_tuple(divB, divB_conj, curlB_x, curlB_y, curlB_z, gradB_norm, alpha_B, dBxdx, dBxdy,
+                                        dBxdz, dBydx, dBydy, dBydz, dBzdx, dBzdy, dBzdz);
     neighborhood.ijLoop(input, output, DivBCurlBInteraction<T>{wh},
                         DivBCurlBPostamble<T, Tc>{K, scheme, alpha_B_const});
 }

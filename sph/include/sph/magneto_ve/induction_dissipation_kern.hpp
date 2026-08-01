@@ -58,11 +58,11 @@ struct InductionAndDissipationInteraction
     {
         const auto [i, iPos, hi, vxi, vyi, vzi, ci, Bxi, Byi, Bzi, mi, xmassi, kxi, gradhi, c11i, c12i, c13i, c22i,
                     c23i, c33i, alpha_Bi, psi_ch_i, nci, dBxdxi, dBxdyi, dBxdzi, dBydxi, dBydyi, dBydzi, dBzdxi,
-                    dBzdyi, dBzdzi, dvxdxi, dvxdyi, dvxdzi, dvydxi, dvydyi, dvydzi, dvzdxi, dvzdyi, dvzdzi, divBi,
+                    dBzdyi, dBzdzi, dvxdxi, dvxdyi, dvxdzi, dvydxi, dvydyi, dvydzi, dvzdxi, dvzdyi, dvzdzi, divB_conj_i,
                     dui] = iData;
         const auto [j, jPos, hj, vxj, vyj, vzj, cj, Bxj, Byj, Bzj, mj, xmassj, kxj, gradhj, c11j, c12j, c13j, c22j,
                     c23j, c33j, alpha_Bj, psi_ch_j, ncj, dBxdxj, dBxdyj, dBxdzj, dBydxj, dBydyj, dBydzj, dBzdxj,
-                    dBzdyj, dBzdzj, dvxdxj, dvxdyj, dvxdzj, dvydxj, dvydyj, dvydzj, dvzdxj, dvzdyj, dvzdzj, divBj,
+                    dBzdyj, dBzdzj, dvxdxj, dvxdyj, dvxdzj, dvydxj, dvydyj, dvydzj, dvzdxj, dvzdyj, dvzdzj, divB_conj_j,
                     duj] = jData;
 
         T rhoi = kxi * mi / xmassi;
@@ -105,7 +105,7 @@ struct InductionAndDissipationInteraction
         T Lij = T(1);
 
         if (scheme == ResistivityScheme::SLR || scheme == ResistivityScheme::SLRB ||
-            scheme == ResistivityScheme::SLRB2)
+            scheme == ResistivityScheme::SLRB2 || scheme == ResistivityScheme::SLRV)
         {
             cstone::Vec3<T> gradBx_i{dBxdxi, dBxdyi, dBxdzi};
             cstone::Vec3<T> gradBy_i{dBydxi, dBydyi, dBydzi};
@@ -141,8 +141,16 @@ struct InductionAndDissipationInteraction
             }
             T  eta_crit_i = std::cbrt(T(32) * T(M_PI) / T(3) / T(nci));
             Tc eta_ab     = (v1 < v2) ? v1 : v2; // spacing in units of h
-            B_ab += mhdSLRCorrection<Tc, T>(r_ij, eta_ab, eta_crit_i, balsi, balsj, gradBx_i, gradBy_i, gradBz_i,
-                                            gradBx_j, gradBy_j, gradBz_j);
+            if (scheme == ResistivityScheme::SLRV)
+            {
+                B_ab += mhdSLRVCorrection<Tc, T>(r_ij, eta_ab, eta_crit_i, B_ab, gradBx_i, gradBy_i, gradBz_i,
+                                                 gradBx_j, gradBy_j, gradBz_j);
+            }
+            else
+            {
+                B_ab += mhdSLRCorrection<Tc, T>(r_ij, eta_ab, eta_crit_i, balsi, balsj, gradBx_i, gradBy_i, gradBz_i,
+                                                gradBx_j, gradBy_j, gradBz_j);
+            }
         }
 
         // Conjugate-pair (non-symmetric) artificial resistivity (Price et al. 2018, eqs. 181-182)
@@ -160,8 +168,7 @@ struct InductionAndDissipationInteraction
         T v_alfven2j = (Bxj * Bxj + Byj * Byj + Bzj * Bzj) / (rhoj * mu_0);
         T c_hj       = fclean * std::sqrt(cj * cj + v_alfven2j);
 
-        // Non-symmetric constrained divB cleaning (Price et al. 2018, eq. 172)
-        // VE-native conservative grad-psi: Lagrangian conjugate of the conservative divB
+        // constrained divB cleaning (Price et al. 2018, eq. 172), VE-native conjugate of divB_conj
         cstone::Vec3<Tc> divB_clean = rhoi * mj *
                                       (psi_ch_i * c_hi * xmassi * xmassi / (kxi * mi * mi * gradhi) * termAi +
                                        psi_ch_j * c_hj * xmassj * xmassj / (kxj * mj * mj * gradhj) * termAj);
@@ -182,7 +189,7 @@ struct InductionAndDissipationPostamble
     {
         const auto [i, iPos, hi, vxi, vyi, vzi, ci, Bxi, Byi, Bzi, mi, xmassi, kxi, gradhi, c11i, c12i, c13i, c22i,
                     c23i, c33i, alpha_Bi, psi_ch_i, nci, dBxdxi, dBxdyi, dBxdzi, dBydxi, dBydyi, dBydzi, dBzdxi,
-                    dBzdyi, dBzdzi, dvxdxi, dvxdyi, dvxdzi, dvydxi, dvydyi, dvydzi, dvzdxi, dvzdyi, dvzdzi, divBi,
+                    dBzdyi, dBzdzi, dvxdxi, dvxdyi, dvxdzi, dvydxi, dvydyi, dvydzi, dvzdxi, dvzdyi, dvzdzi, divB_conj_i,
                     dui] = iData;
         auto [dB_diss_x, dB_diss_y, dB_diss_z, divB_clean_x, divB_clean_y, divB_clean_z, du_diss] = result;
 
@@ -202,7 +209,7 @@ struct InductionAndDissipationPostamble
         T v_alfven2 = (Bxi * Bxi + Byi * Byi + Bzi * Bzi) / (mu_0 * rhoi);
         T ch        = fclean * std::sqrt(ci * ci + v_alfven2);
         T tau_Inv   = (sigma_c * ch) / hi;
-        T d_psi_ch_out = -ch * divBi - psi_ch_i * (tau_Inv + (dvxdxi + dvydyi + dvzdzi) / T(2));
+        T d_psi_ch_out = -ch * divB_conj_i - psi_ch_i * (tau_Inv + (dvxdxi + dvydyi + dvzdzi) / T(2));
 
         // Diagnostic outputs: resistive dB/dt and resistive heating
         Tc dB_diss_out_x = K * dB_diss_x;
@@ -224,13 +231,13 @@ void inductionAndDissipationIjLoop(
     const T* psi_ch, const unsigned* nc, const T* dBxdx, const T* dBxdy, const T* dBxdz, const T* dBydx,
     const T* dBydy, const T* dBydz, const T* dBzdx, const T* dBzdy, const T* dBzdz, const T* dvxdx, const T* dvxdy,
     const T* dvxdz, const T* dvydx, const T* dvydy, const T* dvydz, const T* dvzdx, const T* dvzdy, const T* dvzdz,
-    const T* divB, const T* wh, Tc* dBx_dt, Tc* dBy_dt, Tc* dBz_dt, Tc* du, T* d_psi_ch, Tc* dB_diss_x,
+    const T* divB_conj, const T* wh, Tc* dBx_dt, Tc* dBy_dt, Tc* dBz_dt, Tc* du, T* d_psi_ch, Tc* dB_diss_x,
     Tc* dB_diss_y, Tc* dB_diss_z, Tc* du_diss)
 {
     const auto input =
         std::make_tuple(vx, vy, vz, c, Bx, By, Bz, m, xm, kx, gradh, c11, c12, c13, c22, c23, c33, alpha_B, psi_ch, nc,
                         dBxdx, dBxdy, dBxdz, dBydx, dBydy, dBydz, dBzdx, dBzdy, dBzdz, dvxdx, dvxdy, dvxdz, dvydx,
-                        dvydy, dvydz, dvzdx, dvzdy, dvzdz, divB, du);
+                        dvydy, dvydz, dvzdx, dvzdy, dvzdz, divB_conj, du);
     const auto output = std::make_tuple(dBx_dt, dBy_dt, dBz_dt, du, d_psi_ch, dB_diss_x, dB_diss_y, dB_diss_z, du_diss);
     neighborhood.ijLoop(input, output, InductionAndDissipationInteraction<T>{wh, T(mu_0), arFloor, scheme},
                         InductionAndDissipationPostamble<T, Tc>{K, T(mu_0)});

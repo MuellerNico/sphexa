@@ -51,9 +51,9 @@ void computeInductionAndDissipationGpu(const GroupView& grp, HydroData& d, Magne
         rawPtr(m.psi_ch), rawPtr(d.nc), rawPtr(m.dBxdx), rawPtr(m.dBxdy), rawPtr(m.dBxdz), rawPtr(m.dBydx),
         rawPtr(m.dBydy), rawPtr(m.dBydz), rawPtr(m.dBzdx), rawPtr(m.dBzdy), rawPtr(m.dBzdz), rawPtr(m.dvxdx),
         rawPtr(m.dvxdy), rawPtr(m.dvxdz), rawPtr(m.dvydx), rawPtr(m.dvydy), rawPtr(m.dvydz), rawPtr(m.dvzdx),
-        rawPtr(m.dvzdy), rawPtr(m.dvzdz), rawPtr(m.divB), rawPtr(d.wh), rawPtr(m.dBx), rawPtr(m.dBy), rawPtr(m.dBz),
-        rawPtr(d.du), rawPtr(m.d_psi_ch), rawPtr(m.dB_diss_x), rawPtr(m.dB_diss_y), rawPtr(m.dB_diss_z),
-        rawPtr(m.du_diss));
+        rawPtr(m.dvzdy), rawPtr(m.dvzdz), rawPtr(m.divB_conj), rawPtr(d.wh), rawPtr(m.dBx), rawPtr(m.dBy),
+        rawPtr(m.dBz), rawPtr(d.du), rawPtr(m.d_psi_ch), rawPtr(m.dB_diss_x), rawPtr(m.dB_diss_y),
+        rawPtr(m.dB_diss_z), rawPtr(m.du_diss));
 
     checkGpuErrors(cudaDeviceSynchronize());
 }

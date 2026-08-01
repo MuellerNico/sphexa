@@ -72,9 +72,10 @@ void computeIadFullDivvCurlv(const GroupView& grp, SimulationData& sim, const cs
 
         divBCurlBIjLoop(d.neighborhood, d.K, md.Bx.data(), md.By.data(), md.Bz.data(), d.kx.data(), d.xm.data(),
                         d.c11.data(), d.c12.data(), d.c13.data(), d.c22.data(), d.c23.data(), d.c33.data(),
-                        d.gradh.data(), d.wh.data(), md.divB.data(), md.curlB_x.data(), md.curlB_y.data(),
-                        md.curlB_z.data(), md.gradB_norm.data(), md.alpha_B.data(), md.dBxdx.data(), md.dBxdy.data(),
-                        md.dBxdz.data(), md.dBydx.data(), md.dBydy.data(), md.dBydz.data(), md.dBzdx.data(),
+                        d.gradh.data(), d.wh.data(), md.divB.data(), md.divB_conj.data(), md.curlB_x.data(),
+                        md.curlB_y.data(), md.curlB_z.data(), md.gradB_norm.data(), md.alpha_B.data(),
+                        md.dBxdx.data(), md.dBxdy.data(), md.dBxdz.data(), md.dBydx.data(), md.dBydy.data(),
+                        md.dBydz.data(), md.dBzdx.data(),
                         md.dBzdy.data(), md.dBzdz.data(), md.resistivityScheme, md.alpha_B_const);
     }
 }

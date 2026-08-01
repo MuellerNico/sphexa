@@ -33,6 +33,7 @@
 
 #include "cstone/cuda/annotation.hpp"
 #include "cstone/primitives/math.hpp"
+#include "cstone/primitives/stl.hpp"
 #include "cstone/util/tuple.hpp"
 
 namespace sph::magneto
@@ -94,6 +95,57 @@ mhdSLRCorrection(cstone::Vec3<Tc> R, Tc eta_ab, T eta_crit, T balsi, T balsj, cs
     T phi_ab  = T(0.5) * kappa_ab * vanLeer;
 
     return Tc(-phi_ab) * (Tc(balsi) * JBR_a + Tc(balsj) * JBR_b);
+}
+
+/*! @brief SLR correction with a full-vector van Leer limiter and a per-component minmod clamp
+ *
+ * Slope agreement is measured on the full directional-derivative vectors J_B·R;
+ * Correction is clamped per component between zero and full cancellation of B_a 
+ * to never overshoot or flip sign
+ *
+ * @param R           relative position vector (x_a - x_b)
+ * @param eta_ab      min(|R|/h_a, |R|/h_b)  (q_ab, Eq. 15)
+ * @param eta_crit    cbrt(32π / (3 n_b))    (q_crit, Eq. 16)
+ * @param B_ab        pairwise field difference B_a - B_b the correction will be added to
+ * @param gradBx_a    ∇Bx at particle a (∂Bx/∂x, ∂Bx/∂y, ∂Bx/∂z); same for By, Bz and particle b
+ * @return            additive correction Δ such that B_ab_SLR = B_ab + Δ
+ */
+template<class Tc, class T>
+HOST_DEVICE_FUN inline cstone::Vec3<Tc>
+mhdSLRVCorrection(cstone::Vec3<Tc> R, Tc eta_ab, T eta_crit, cstone::Vec3<Tc> B_ab, cstone::Vec3<T> gradBx_a,
+                  cstone::Vec3<T> gradBy_a, cstone::Vec3<T> gradBz_a, cstone::Vec3<T> gradBx_b,
+                  cstone::Vec3<T> gradBy_b, cstone::Vec3<T> gradBz_b)
+{
+    constexpr T q_fold_inv = 5.0f; // 1/q_fold with q_fold = 0.2 (Frontiere et al. 2017)
+
+    cstone::Vec3<Tc> JBR_a = matvec3(gradBx_a, gradBy_a, gradBz_a, R);
+    cstone::Vec3<Tc> JBR_b = matvec3(gradBx_b, gradBy_b, gradBz_b, R);
+
+    // κ_ab (Eq. 14)
+    T kappa_ab = T(1);
+    if (eta_ab < eta_crit) // force limiter to zero for anomalously close particle pairs
+    {
+        T etaDiff = T(q_fold_inv) * T(eta_ab - eta_crit);
+        kappa_ab  = std::exp(-etaDiff * etaDiff);
+    }
+
+    // swap-symmetric vector van Leer: 1 iff the two directional derivatives agree exactly,
+    // 0 for orthogonal or opposing slopes
+    T den     = T(norm2(JBR_a) + norm2(JBR_b));
+    T num     = T(2) * T(dot(JBR_a, JBR_b));
+    T vanLeer = (den > T(0)) ? stl::max(T(0), num / den) : T(0);
+    T phi_ab  = T(0.5) * kappa_ab * vanLeer;
+
+    cstone::Vec3<Tc> corr = Tc(-phi_ab) * (JBR_a + JBR_b);
+
+    // minmod: clamp each component between no correction and full cancellation of the jump
+    for (int c = 0; c < 3; ++c)
+    {
+        Tc lo   = stl::min(Tc(0), -B_ab[c]);
+        Tc hi   = stl::max(Tc(0), -B_ab[c]);
+        corr[c] = stl::min(stl::max(corr[c], lo), hi);
+    }
+    return corr;
 }
 
 } // namespace sph::magneto

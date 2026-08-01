@@ -110,7 +110,8 @@ public:
     FieldVector<HydroType> dvzdx, dvzdy, dvzdz;
 
     // Magnetic field spatial derivatives
-    FieldVector<HydroType> divB;
+    FieldVector<HydroType> divB;      // consistent, for diagnostics/output
+    FieldVector<HydroType> divB_conj; // energy-conjugate, cleaning psi source only
     FieldVector<HydroType> curlB_x, curlB_y, curlB_z;
     FieldVector<HydroType> gradB_norm; // 2-norm of the gradient matrix
 
@@ -143,9 +144,9 @@ public:
     inline static constexpr std::array fieldNames{
         "Bx",     "By",       "Bz",          "dBx",   "dBy",     "dBz",     "dBx_m1", "dBy_m1", "dBz_m1",
         "psi_ch", "d_psi_ch", "d_psi_ch_m1", "dvxdx", "dvxdy",   " dvxdz",  "dvydx",  "dvydy",  "dvydz",
-        "dvzdx",  "dvzdy",    "dvzdz",       "divB",  "curlB_x", "curlB_y", "curlB_z", "gradB_norm", "alpha_B",
-        "dBxdx",  "dBxdy",    "dBxdz",       "dBydx", "dBydy",   "dBydz",   "dBzdx",  "dBzdy",  "dBzdz",
-        "dB_diss_x", "dB_diss_y", "dB_diss_z", "du_diss"};
+        "dvzdx",  "dvzdy",    "dvzdz",       "divB",  "divB_conj", "curlB_x", "curlB_y", "curlB_z",
+        "gradB_norm", "alpha_B", "dBxdx",     "dBxdy", "dBxdz",   "dBydx",   "dBydy",  "dBydz",  "dBzdx",
+        "dBzdy",  "dBzdz",    "dB_diss_x",   "dB_diss_y", "dB_diss_z", "du_diss"};
 
     static const inline std::string prefix{"magneto::"};
 
@@ -156,8 +157,8 @@ public:
     auto dataTuple()
     {
         auto ret = std::tie(Bx, By, Bz, dBx, dBy, dBz, dBx_m1, dBy_m1, dBz_m1, psi_ch, d_psi_ch, d_psi_ch_m1, dvxdx,
-                            dvxdy, dvxdz, dvydx, dvydy, dvydz, dvzdx, dvzdy, dvzdz, divB, curlB_x, curlB_y, curlB_z,
-                            gradB_norm, alpha_B, dBxdx, dBxdy, dBxdz, dBydx, dBydy, dBydz, dBzdx, dBzdy, dBzdz,
+                            dvxdy, dvxdz, dvydx, dvydy, dvydz, dvzdx, dvzdy, dvzdz, divB, divB_conj, curlB_x, curlB_y,
+                            curlB_z, gradB_norm, alpha_B, dBxdx, dBxdy, dBxdz, dBydx, dBydy, dBydz, dBzdx, dBzdy, dBzdz,
                             dB_diss_x, dB_diss_y, dB_diss_z, du_diss);
 
 #if defined(__clang__) || __GNUC__ > 11

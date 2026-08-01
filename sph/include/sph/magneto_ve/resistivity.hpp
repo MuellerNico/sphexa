@@ -39,7 +39,8 @@ enum class ResistivityScheme : int
     Switch   = 1, //!< Tricco & Price (2013) switch
     SLR      = 2, //!< slope-limited reconstruction of B (García-Senz & Cabezón 2026 analogue), reconstruction only
     SLRB     = 3, //!< SLR + Balsara-like modulation (1 - modulator)
-    SLRB2    = 4  //!< SLR + Balsara-like modulation (1 - modulator^2)
+    SLRB2    = 4, //!< SLR + Balsara-like modulation (1 - modulator^2)
+    SLRV     = 5  //!< SLR with full-vector van Leer limiter and minmod clamp against the pair jump
 };
 
 } // namespace sph::magneto
