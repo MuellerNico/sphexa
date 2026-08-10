@@ -102,6 +102,7 @@ struct InductionAndDissipationInteraction
         T alpha_B_avg = T(0.5) * (alpha_Bi + alpha_Bj);
 
         cstone::Vec3<Tc> B_ab{Bxi - Bxj, Byi - Byj, Bzi - Bzj};
+        cstone::Vec3<Tc> B_ab_raw = B_ab; // pre-reconstruction, needed for energy conjugate
         T Lij = T(1);
 
         if (scheme == ResistivityScheme::SLR || scheme == ResistivityScheme::SLRB ||
@@ -171,7 +172,7 @@ struct InductionAndDissipationInteraction
         T diss_op = T(0.5) * mj * rhoi * resistivity_ab * (grkern_i + grkern_j);
 
         cstone::Vec3<Tc> dB_diss = diss_op * B_ab;
-        T                du_diss = diss_op * norm2(B_ab);
+        T du_diss = diss_op * dot(B_ab_raw, B_ab);
 
         // wave cleaning speeds
         T v_alfven2i = (Bxi * Bxi + Byi * Byi + Bzi * Bzi) / (mu_0 * rhoi);
@@ -214,7 +215,7 @@ struct InductionAndDissipationPostamble
         dBzi += K * (dB_diss_z - divB_clean_z);
 
         T  rhoi   = kxi * mi / xmassi;
-        Tc du_out = dui - T(0.5) * K / rhoi * du_diss;
+        Tc du_out = dui - T(0.5) * K / (rhoi * mu_0) * du_diss;
 
         // psi time differential (Wissing et al. 2020)
         T v_alfven2 = (Bxi * Bxi + Byi * Byi + Bzi * Bzi) / (mu_0 * rhoi);
@@ -226,7 +227,7 @@ struct InductionAndDissipationPostamble
         Tc dB_diss_out_x = K * dB_diss_x;
         Tc dB_diss_out_y = K * dB_diss_y;
         Tc dB_diss_out_z = K * dB_diss_z;
-        Tc du_diss_out   = -T(0.5) * K / rhoi * du_diss;
+        Tc du_diss_out   = -T(0.5) * K / (rhoi * mu_0) * du_diss;
 
         return std::make_tuple(dBxi, dByi, dBzi, du_out, d_psi_ch_out, dB_diss_out_x, dB_diss_out_y, dB_diss_out_z,
                                du_diss_out);
