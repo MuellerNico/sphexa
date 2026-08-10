@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""Plot 1D line cuts of any (raw or derived) field, overlaying multiple files."""
+"""Plot 1D line cuts of any (raw or derived) field, overlaying multiple files.
+
+Overlaid files take their color by argument position from the shared
+categorical scheme palette (_h5_common.SCHEME_ORDER: a05, SLR, SLRB, SLRB2),
+so a scheme keeps one color across every plotting script.
+"""
 
 import h5py
 import numpy as np
@@ -11,7 +16,10 @@ import os
 import sys
 import argparse
 
-from _h5_common import print_metadata, get_nsteps, resolve_field
+from _h5_common import (print_metadata, get_nsteps, resolve_field,
+                        CLEAN_FONT, apply_clean_style, scheme_colors,
+                        scheme_label, apply_sci_ticks, apply_log_ticks,
+                        SCHEME_ORDER)
 from plot_slice import cubic_spline_3d
 
 # cut axis -> the two perpendicular axes (in x<y<z order, matching --pos)
@@ -91,6 +99,8 @@ if __name__ == "__main__":
             "  %(prog)s dump.h5 --field curlBmag --pos 0.3125 0 --step 10\n"
             "  %(prog)s a.h5 b.h5 --field magneto::By --labels 'low AR','high AR'\n"
             "  %(prog)s a.h5 a.h5 --step 0,20 --scatter         Same file, two steps, raw particles\n"
+            "\nRun colors are positional: pass the dumps in the order "
+            f"{', '.join(SCHEME_ORDER)}.\n"
         ),
     )
     parser.add_argument("files", nargs="+", help="HDF5 input file(s); multiple files overlay")
@@ -108,8 +118,9 @@ if __name__ == "__main__":
                         help="Cut position on the two perpendicular axes, in x<y<z "
                              "order (default: 0 0)")
     parser.add_argument("--labels", default=None,
-                        help="Comma-separated legend labels, one per file "
-                             "(default: dir/filename + time)")
+                        help="Comma-separated legend labels, one per file (default: "
+                             f"the scheme name for that position, "
+                             f"{'/'.join(SCHEME_ORDER)}, then dir/filename; + time)")
     parser.add_argument("-n", "--samples", type=int, default=512,
                         help="Sample points along the line (default: 512)")
     parser.add_argument("--scatter", action="store_true",
@@ -121,8 +132,15 @@ if __name__ == "__main__":
                         help="Plot title (default: field label + cut position)")
     parser.add_argument("-o", "--output", default=None,
                         help="Output PNG path (default: next to the first input file)")
+    parser.add_argument("--clean", action="store_true",
+                        help="Publish mode for thesis figures: save PDF instead of PNG, "
+                             "drop the title (it goes in the caption), and render text "
+                             f"in {CLEAN_FONT} (CLEAN_FONT in _h5_common.py).")
 
     args = parser.parse_args()
+
+    if args.clean:
+        apply_clean_style()
 
     if args.info:
         for f in args.files:
@@ -149,23 +167,29 @@ if __name__ == "__main__":
                            args.samples, args.scatter)
             for f, st in zip(args.files, steps)]
     if labels is None:
-        labels = [f"{_default_label(f)} (t={r['time']:.4f})"
-                  for f, r in zip(args.files, runs)]
+        # the time stays in the label: the same file at two steps is a valid
+        # overlay, and there the positional scheme name doesn't distinguish them
+        labels = [f"{(scheme_label(k) if len(runs) > 1 else None) or _default_label(f)}"
+                  f" (t={r['time']:.4f})"
+                  for k, (f, r) in enumerate(zip(args.files, runs))]
 
     fig, ax = plt.subplots(figsize=(8, 5))
-    for r, lbl in zip(runs, labels):
-        (ln,) = ax.plot(r['si'], r['line'], lw=1.2, label=lbl)
+    for r, lbl, c in zip(runs, labels, scheme_colors(len(runs))):
+        ax.plot(r['si'], r['line'], lw=1.2, color=c, label=lbl)
         if args.scatter:
-            ax.scatter(r['sx'], r['sv'], s=2, color=ln.get_color(),
+            ax.scatter(r['sx'], r['sv'], s=2, color=c,
                        alpha=0.3, linewidths=0, rasterized=True)
     if args.log:
         ax.set_yscale('log')
     a1, a2 = _PERP_AXES[args.axis]
     ax.set_xlabel(args.axis)
     ax.set_ylabel(runs[0]['label'])
-    header = args.title if args.title is not None else runs[0]['label']
-    ax.set_title(f"{header} along {args.axis} "
-                 f"({a1}={args.pos[0]:+.4f}, {a2}={args.pos[1]:+.4f})")
+    apply_sci_ticks(ax)
+    apply_log_ticks(ax)
+    if not args.clean:
+        header = args.title if args.title is not None else runs[0]['label']
+        ax.set_title(f"{header} along {args.axis} "
+                     f"({a1}={args.pos[0]:+.4f}, {a2}={args.pos[1]:+.4f})")
     ax.grid(alpha=0.3)
     ax.legend(fontsize=9)
     plt.tight_layout()
@@ -175,7 +199,8 @@ if __name__ == "__main__":
     else:
         outdir = os.path.dirname(os.path.abspath(args.files[0]))
         short = args.field.split('::')[-1]
+        ext = 'pdf' if args.clean else 'png'
         outname = os.path.join(outdir, f"linecut_{short}_step{steps[0]}_{args.axis}"
-                                       f"_{a1}{args.pos[0]:+.4f}_{a2}{args.pos[1]:+.4f}.png")
-    fig.savefig(outname, dpi=150, bbox_inches='tight')
+                                       f"_{a1}{args.pos[0]:+.4f}_{a2}{args.pos[1]:+.4f}.{ext}")
+    fig.savefig(outname, dpi=300 if args.clean else 150, bbox_inches='tight')
     print(f"Saved: {outname}")

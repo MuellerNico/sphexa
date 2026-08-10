@@ -14,6 +14,7 @@ CLI to write a whitespace-separated table:  x rho vx vy vz p Bx By Bz u
 """
 
 import argparse
+import os
 import numpy as np
 
 GAMMA = 2.0
@@ -188,13 +189,61 @@ def solve(t, n=8192, xmin=-2.0, xmax=2.0, gamma=GAMMA, cfl=0.4):
 
 _cache = {}
 
+# Disk cache lives next to the glass files (workspace/data), i.e. outside the
+# repo: solutions are large-ish binaries and reproducible from this script.
+_DEFAULT_CACHE_DIR = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'data')
 
-def get(t, gamma=GAMMA):
-    """Memoized solve() at overlay resolution (4096 cells is converged at plot scale)."""
-    key = (round(float(t), 9), float(gamma))
-    if key not in _cache:
-        _cache[key] = solve(t, n=4096, gamma=gamma)
-    return _cache[key]
+_cache_dir = None
+
+# Dump times scatter around the nominal output time (0.19999987 vs 0.2), which
+# would defeat a cache keyed on the exact time. Rounding to 1e-4 shifts the
+# waves by <1e-4 in x, far below both the reference grid spacing and plot scale.
+_TIME_DECIMALS = 4
+
+
+def set_cache_dir(path):
+    """Override the disk-cache directory; False disables the disk cache."""
+    global _cache_dir
+    _cache_dir = path
+
+
+def cache_dir():
+    if _cache_dir is not None:
+        return _cache_dir
+    return os.environ.get('SPHEXA_REF_CACHE') or _DEFAULT_CACHE_DIR
+
+
+def _cache_path(t, gamma, n, d):
+    return os.path.join(d, f"briowu_ref_t{t:.4f}_n{n}_g{gamma:g}.npz")
+
+
+def get(t, gamma=GAMMA, n=4096):
+    """Memoized solve() at overlay resolution (4096 cells is converged at plot
+    scale), in-process and on disk (npz in cache_dir(), see set_cache_dir)."""
+    key = (round(float(t), _TIME_DECIMALS), float(gamma), int(n))
+    if key in _cache:
+        return _cache[key]
+
+    d = cache_dir()
+    path = None if d is False else _cache_path(key[0], key[1], key[2], d)
+    if path is not None and os.path.exists(path):
+        with np.load(path) as z:
+            sol = {k: z[k] for k in z.files}
+        _cache[key] = sol
+        print(f"  reference: loaded {path}")
+        return sol
+
+    sol = solve(key[0], n=key[2], gamma=key[1])
+    _cache[key] = sol
+    if path is not None:
+        try:
+            os.makedirs(d, exist_ok=True)
+            np.savez_compressed(path, **sol)
+            print(f"  reference: cached {path}")
+        except OSError as e:
+            print(f"  warning: could not write reference cache {path}: {e}")
+    return sol
 
 
 if __name__ == "__main__":
@@ -205,7 +254,23 @@ if __name__ == "__main__":
                     help="write table to this path (default: stdout summary only)")
     ap.add_argument("--plot", default=None, metavar="PNG",
                     help="save a quick-look figure of the solution")
+    ap.add_argument("--precompute", action="store_true",
+                    help="populate the plot_shocktube overlay cache for this time "
+                         "(npz in --cache-dir) instead of solving on first plot")
+    ap.add_argument("--cache-dir", default=None,
+                    help=f"disk-cache directory (default: {_DEFAULT_CACHE_DIR}, "
+                         "or $SPHEXA_REF_CACHE)")
+    ap.add_argument("--overlay-ncells", type=int, default=4096,
+                    help="cell count of the cached overlay solution (default: 4096, "
+                         "what plot_shocktube asks for)")
     args = ap.parse_args()
+
+    if args.cache_dir:
+        set_cache_dir(args.cache_dir)
+
+    if args.precompute:
+        get(args.time, n=args.overlay_ncells)
+        raise SystemExit(0)
 
     sol = solve(args.time, n=args.ncells)
     cols = ('x', 'rho', 'vx', 'vy', 'vz', 'p', 'Bx', 'By', 'Bz', 'u')

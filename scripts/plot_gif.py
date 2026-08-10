@@ -101,6 +101,9 @@ def make_shocktube_gif(fname, start, end, y0=None, z0=None, thickness=None,
                        n_workers=None, max_frames=100):
     if n_workers is None:
         n_workers = min(cpu_count(), 16)
+    # every frame is a distinct dump time, so disk-caching the references would
+    # just litter the cache dir with single-use solutions
+    plot_shocktube.briowu_reference.set_cache_dir(False)
     steps = _stride(start, end, max_frames)
     work = [(fname, s, y0, z0, thickness) for s in steps]
 

@@ -22,7 +22,8 @@ COLUMNS = [
     "eMag",           # 9  md.eMag
     "meanDivBError",  # 10 md.meanDivBError
     "maxDivBError",   # 11 md.maxDivBError
-    "extra",          # 12 test-specific scalar: KH growth rate (kh) or RMS Mach number (turb)
+    "resHeating",     # 12 md.resHeating: total resistive heating rate
+    "extra",          # 13 test-specific scalar: KH growth rate (kh) or RMS Mach number (turb)
 ]
 
 # label + panel title for the trailing test-specific column (index 12), by --kind
@@ -45,9 +46,16 @@ def plot_constants(fname, show=False, kind="turb"):
     it = d["iteration"]
     final_time = d["ttot"][-1]
 
-    extra_label = EXTRA_LABELS.get(kind, "extra (col 12)")
+    extra_label = EXTRA_LABELS.get(kind, "extra (col 13)")
     has_extra = "extra" in d
-    n_panels = 7 if has_extra else 6
+    has_res = "resHeating" in d
+    n_panels = 6 + int(has_res) + int(has_extra)
+
+    # cumulative magnetic energy removed by artificial resistivity
+    cum = None
+    if has_res:
+        res = d["resHeating"]
+        cum = np.concatenate(([0.0], np.cumsum(0.5 * (res[1:] + res[:-1]) * np.diff(d["ttot"]))))
 
     ncols = 2
     nrows = (n_panels + ncols - 1) // ncols
@@ -114,10 +122,19 @@ def plot_constants(fname, show=False, kind="turb"):
     # --- Panel 4: Magnetic energy ---
     ax = ax_list[3]
     ax.set_ylabel("eMag / eMag₀")
-    eMag = d["eMag"] / d["eMag"][0] 
+    eMag = d["eMag"] / d["eMag"][0]
     pos = eMag > 0
     if pos.any():
-        ax.plot(it[pos], eMag[pos], color="tab:purple", linewidth=1.2)
+        ax.plot(it[pos], eMag[pos], color="tab:purple", linewidth=1.2, label="eMag")
+    # dissipation-only expectation. eMag above it = magnetic energy created by the
+    # ideal induction term acting on velocity noise; the gap is that source, integrated.
+    if has_res:
+        floor = 1.0 - cum / d["eMag"][0]
+        ax.plot(it, floor, color="tab:gray", linewidth=1.0, linestyle="--",
+                label="1 − ∫resistive / eMag₀")
+        ax.fill_between(it, floor, eMag, where=eMag > floor, color="tab:purple",
+                        alpha=0.12, linewidth=0, label="ideal-induction source")
+        ax.legend(fontsize=8, loc="lower left")
     ax.grid(True, which="both", alpha=0.3)
 
     # --- Panel 5: div(B) errors (log scale) ---
@@ -142,9 +159,30 @@ def plot_constants(fname, show=False, kind="turb"):
     ax.plot(it, d["minDt"], color="tab:green", linewidth=1.2)
     ax.grid(True, alpha=0.3)
 
-    # --- Panel 7: test-specific scalar (turbulence RMS Mach number, or magnetic KH growth rate) ---
+    next_panel = 6
+
+    # --- Panel: resistive heating ---
+    # Left axis: instantaneous total resistive heating rate dE_int/dt. 
+    # Right axis: cumulative time-integral (= total magnetic energy dissipated so far)
+    if has_res:
+        ax = ax_list[next_panel]
+        next_panel += 1
+        res = d["resHeating"]
+        ax.set_ylabel("resistive heating rate")
+        ax.plot(it, res, color="tab:brown", linewidth=1.2, label="dE_int/dt (resistive)")
+        ax.grid(True, alpha=0.3)
+
+        ax2 = ax.twinx()
+        ax2.plot(it, cum, color="tab:gray", linewidth=1.2, linestyle="--",
+                 label="cumulative dissipated energy")
+        ax2.set_ylabel("cumulative")
+        lines = ax.get_lines() + ax2.get_lines()
+        ax.legend(lines, [l.get_label() for l in lines], fontsize=8, loc="upper left")
+
+    # --- Panel: test-specific scalar (turbulence RMS Mach number, or magnetic KH growth rate) ---
     if has_extra:
-        ax = ax_list[6]
+        ax = ax_list[next_panel]
+        next_panel += 1
         ax.set_ylabel(extra_label)
         ax.plot(it, d["extra"], color="tab:orange", linewidth=1.2)
         ax.grid(True, alpha=0.3)
@@ -177,7 +215,7 @@ if __name__ == "__main__":
     parser.add_argument("file", help="Path to constants.txt")
     parser.add_argument("--show", action="store_true", help="Show interactive plot")
     parser.add_argument("--kind", choices=["turb", "kh"], default="turb",
-                        help="meaning of the trailing column 12: 'turb' = RMS Mach number (default), "
+                        help="meaning of the trailing column 13: 'turb' = RMS Mach number (default), "
                              "'kh' = magnetic Kelvin-Helmholtz growth rate")
     args = parser.parse_args()
 
