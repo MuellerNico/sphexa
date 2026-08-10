@@ -192,9 +192,12 @@ public:
         sph::magneto::computeMomentumEnergy<SLR>(groups_.view(), nullptr, simData, domain.box());
         timer.step("MagneticMomentumAndEnergy");
 
+        // scratch: ax/ay/az hold the accelerations from computeMomentumEnergy, so prho stands in.
+        // Not divv/curlv -- they survive to the dump as diagnostics; prho does not (recomputed by
+        // computeEOS every step, already documented as destroyed by output time).
         domain.exchangeHalos(get<"divB_conj", "curlB_x", "curlB_y", "curlB_z", "psi_ch", "alpha_B", "dBxdx", "dBxdy",
                                  "dBxdz", "dBydx", "dBydy", "dBydz", "dBzdx", "dBzdy", "dBzdz">(md),
-                             get<"divv">(d), get<"curlv">(d));
+                             get<"prho">(d), get<"keys">(d));
         timer.step("mpi::synchronizeHalos");
 
         sph::magneto::computeInductionAndDissipation(groups_.view(), simData, domain.box());
