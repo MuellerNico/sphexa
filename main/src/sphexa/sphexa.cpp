@@ -171,9 +171,6 @@ int main(int argc, char** argv)
         else if (resistivity == "SLR" || resistivity == "slr") { md.resistivityScheme = ResistivityScheme::SLR; }
         else if (resistivity == "SLRB" || resistivity == "slrb") { md.resistivityScheme = ResistivityScheme::SLRB; }
         else if (resistivity == "SLRB2" || resistivity == "slrb2") { md.resistivityScheme = ResistivityScheme::SLRB2; }
-        else if (resistivity == "SLRV" || resistivity == "slrv") { md.resistivityScheme = ResistivityScheme::SLRV; }
-        else if (resistivity == "SLRV2" || resistivity == "slrv2") { md.resistivityScheme = ResistivityScheme::SLRV2; }
-        else if (resistivity == "SLRC" || resistivity == "slrc") { md.resistivityScheme = ResistivityScheme::SLRC; }
         else
         {
             try { md.alpha_B_const = std::stod(resistivity); }
@@ -330,9 +327,6 @@ void printHelp(char* name, int rank)
         printf("\t--resistivity STRING \t Artificial resistivity for the magneto-ve propagator:\n"
                "\t\t\t \"switch\" (Tricco & Price 2013), \"SLR\" (slope-limited reconstruction of B),\n"
                "\t\t\t \"SLRB\"/\"SLRB2\" (SLR + Balsara-like modulation, power 1/2),\n"
-               "\t\t\t \"SLRV\" (SLR with full-vector van Leer limiter + minmod clamp),\n"
-               "\t\t\t \"SLRV2\" (SLRV without the minmod clamp),\n"
-               "\t\t\t \"SLRC\" (per-component minmod limiter instead of a shared confidence),\n"
                "\t\t\t or a number to set a constant alpha_B [default: SLR]\n\n");
 
         printf("\t--arfloor NUM \t Floor F in the SLRB/SLRB2 resistivity clamp Lij = max(F, modulator).\n"

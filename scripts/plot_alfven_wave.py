@@ -380,7 +380,7 @@ if __name__ == "__main__":
             "  %(prog)s data.h5 5            PNG of B2 vs x1 at step 5\n"
             "  %(prog)s data.h5 0-100        GIF of steps 0..100\n"
             "  %(prog)s data.h5 --all        PNG of B2 vs x1 for every step\n"
-            "  %(prog)s a.h5 b.h5 --analyze --labels 'alphaB=0.5' SLRV\n"
+            "  %(prog)s a.h5 b.h5 --analyze --labels 'alphaB=0.5' SLR\n"
             "                               Mode amplitude / noise power / phase\n"
             "                               figures overlaying both runs\n"
             "  %(prog)s a.h5 b.h5 --analyze --trange 0 5 --clean\n"

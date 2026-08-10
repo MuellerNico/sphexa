@@ -24,7 +24,7 @@
 
 /*! @file calculates dB/dt with the induction equation, as well as dissipation and correction terms
  *
- * @author Lukas Schmidt
+ * @author Lukas Schmidt, Nicolas Müller
  */
 
 #pragma once
@@ -106,8 +106,7 @@ struct InductionAndDissipationInteraction
         T Lij = T(1);
 
         if (scheme == ResistivityScheme::SLR || scheme == ResistivityScheme::SLRB ||
-            scheme == ResistivityScheme::SLRB2 || scheme == ResistivityScheme::SLRV ||
-            scheme == ResistivityScheme::SLRV2 || scheme == ResistivityScheme::SLRC)
+            scheme == ResistivityScheme::SLRB2)
         {
             cstone::Vec3<T> gradBx_i{dBxdxi, dBxdyi, dBxdzi};
             cstone::Vec3<T> gradBy_i{dBydxi, dBydyi, dBydzi};
@@ -143,26 +142,8 @@ struct InductionAndDissipationInteraction
             }
             T  eta_crit_i = std::cbrt(T(32) * T(M_PI) / T(3) / T(nci));
             Tc eta_ab     = (v1 < v2) ? v1 : v2; // spacing in units of h
-            if (scheme == ResistivityScheme::SLRV)
-            {
-                B_ab += mhdSLRVCorrection<Tc, T>(r_ij, eta_ab, eta_crit_i, B_ab, gradBx_i, gradBy_i, gradBz_i,
-                                                 gradBx_j, gradBy_j, gradBz_j);
-            }
-            else if (scheme == ResistivityScheme::SLRV2)
-            {
-                B_ab += mhdSLRV2Correction<Tc, T>(r_ij, eta_ab, eta_crit_i, gradBx_i, gradBy_i, gradBz_i, gradBx_j,
-                                                  gradBy_j, gradBz_j);
-            }
-            else if (scheme == ResistivityScheme::SLRC)
-            {
-                B_ab += mhdSLRCCorrection<Tc, T>(r_ij, eta_ab, eta_crit_i, B_ab, gradBx_i, gradBy_i, gradBz_i,
-                                                 gradBx_j, gradBy_j, gradBz_j);
-            }
-            else
-            {
-                B_ab += mhdSLRCorrection<Tc, T>(r_ij, eta_ab, eta_crit_i, balsi, balsj, gradBx_i, gradBy_i, gradBz_i,
-                                                gradBx_j, gradBy_j, gradBz_j);
-            }
+            B_ab += mhdSLRCorrection<Tc, T>(r_ij, eta_ab, eta_crit_i, balsi, balsj, gradBx_i, gradBy_i, gradBz_i,
+                                            gradBx_j, gradBy_j, gradBz_j);
         }
 
         // Conjugate-pair (non-symmetric) artificial resistivity (Price et al. 2018, eqs. 181-182)
