@@ -40,7 +40,10 @@ enum class ResistivityScheme : int
     SLR      = 2, //!< slope-limited reconstruction of B (García-Senz & Cabezón 2026 analogue), reconstruction only
     SLRB     = 3, //!< SLR + Balsara-like modulation (1 - modulator)
     SLRB2    = 4, //!< SLR + Balsara-like modulation (1 - modulator^2)
-    SLRV     = 5  //!< SLR with full-vector van Leer limiter and minmod clamp against the pair jump
+    SLRV     = 5, //!< SLR with full-vector van Leer limiter and minmod clamp against the pair jump
+    SLRV2    = 6, //!< SLRV without the minmod clamp (ablation: isolates the vector limiter's own effect)
+    SLRC     = 7  //!< SLR with a per-component minmod limiter instead of a shared vector/scalar confidence
+
 };
 
 } // namespace sph::magneto

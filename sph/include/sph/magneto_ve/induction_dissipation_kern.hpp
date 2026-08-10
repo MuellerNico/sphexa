@@ -105,7 +105,8 @@ struct InductionAndDissipationInteraction
         T Lij = T(1);
 
         if (scheme == ResistivityScheme::SLR || scheme == ResistivityScheme::SLRB ||
-            scheme == ResistivityScheme::SLRB2 || scheme == ResistivityScheme::SLRV)
+            scheme == ResistivityScheme::SLRB2 || scheme == ResistivityScheme::SLRV ||
+            scheme == ResistivityScheme::SLRV2 || scheme == ResistivityScheme::SLRC)
         {
             cstone::Vec3<T> gradBx_i{dBxdxi, dBxdyi, dBxdzi};
             cstone::Vec3<T> gradBy_i{dBydxi, dBydyi, dBydzi};
@@ -144,6 +145,16 @@ struct InductionAndDissipationInteraction
             if (scheme == ResistivityScheme::SLRV)
             {
                 B_ab += mhdSLRVCorrection<Tc, T>(r_ij, eta_ab, eta_crit_i, B_ab, gradBx_i, gradBy_i, gradBz_i,
+                                                 gradBx_j, gradBy_j, gradBz_j);
+            }
+            else if (scheme == ResistivityScheme::SLRV2)
+            {
+                B_ab += mhdSLRV2Correction<Tc, T>(r_ij, eta_ab, eta_crit_i, gradBx_i, gradBy_i, gradBz_i, gradBx_j,
+                                                  gradBy_j, gradBz_j);
+            }
+            else if (scheme == ResistivityScheme::SLRC)
+            {
+                B_ab += mhdSLRCCorrection<Tc, T>(r_ij, eta_ab, eta_crit_i, B_ab, gradBx_i, gradBy_i, gradBz_i,
                                                  gradBx_j, gradBy_j, gradBz_j);
             }
             else
