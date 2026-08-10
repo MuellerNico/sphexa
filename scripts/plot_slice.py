@@ -1,5 +1,12 @@
 #!/usr/bin/env python3
-"""Plot 2D SPH-interpolated slices of any (raw or derived) field. """
+"""Plot 2D SPH-interpolated slices of any (raw or derived) field.
+
+Several inputs are tiled into one figure (--layout, --labels), all panels drawn
+against a single shared color scale and colorbar. Each input is a file with an
+optional step, so repeating a file shows two of its steps side by side:
+
+    plot_slice.py a.h5 2 b.h5 2 a.h5 5 b.h5 5 --labels 128 256 --label-time
+"""
 
 import h5py
 import numpy as np
@@ -7,7 +14,7 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from matplotlib.colors import LogNorm
-from mpl_toolkits.axes_grid1 import make_axes_locatable
+from mpl_toolkits.axes_grid1 import make_axes_locatable, ImageGrid
 
 matplotlib.rcParams['xtick.direction'] = 'in'
 matplotlib.rcParams['ytick.direction'] = 'in'
@@ -183,22 +190,16 @@ def compute_slice_grids(fname, step, field, resolution,
     return out
 
 
-# Plot a precomputed slice (grid or scatter) and return the figure.
-def render_slice(grids, slice_axis, slice_pos, title,
-                 vmin, vmax, cmap, log=False, point_size=1.0,
-                 n_contours=0, contour_color='black',
-                 fieldline_color='black', fieldline_density=1.0,
-                 fieldline_broken=False, xlim=None, ylim=None, clean=False):
-    ha, va = _PLOT_AXES[slice_axis]
-    time_val = grids['time']
-    header = title if title is not None else grids['label']
-
+# Draw one precomputed slice (grid or scatter) into an existing axes; returns
+# the mappable for the colorbar. Shared by the single- and multi-panel figures.
+def _draw_panel(ax, grids, vmin, vmax, cmap, log=False, point_size=1.0,
+                n_contours=0, contour_color='black',
+                fieldline_color='black', fieldline_density=1.0,
+                fieldline_broken=False, xlim=None, ylim=None):
     # Log colormap: pass via norm= (and don't also pass vmin/vmax).
     color_kw = ({'norm': LogNorm(vmin=vmin, vmax=vmax)} if log
                 else {'vmin': vmin, 'vmax': vmax})
 
-    fig, ax = plt.subplots(figsize=(8, 7))
-    ax.set_aspect('equal', adjustable='box')
     if grids.get('mode') == 'scatter':
         im = ax.scatter(grids['xs'], grids['ys'], c=grids['values'],
                         s=point_size, cmap=cmap, linewidths=0,
@@ -236,22 +237,132 @@ def render_slice(grids, slice_axis, slice_pos, title,
         ax.set_xlim(xlim)
     if ylim is not None:
         ax.set_ylim(ylim)
-    # append_axes tracks the fixed-aspect host axes, so the colorbar stays
-    # flush with the plot edge (fig.colorbar(ax=ax) leaves a gap there).
-    cax = make_axes_locatable(ax).append_axes("right", size="4%", pad=0.08)
-    cbar = fig.colorbar(im, cax=cax)
-    # Small/large tick values switch to an offset in scientific notation
-    # (e.g. 0.2..1.2 with a x10^-3 above) instead of 0.0002, 0.0004, ...
+    return im
+
+
+# Small/large tick values switch to an offset in scientific notation
+# (e.g. 0.2..1.2 with a x10^-3 above) instead of 0.0002, 0.0004, ...
+def _format_cbar(cbar, label, log):
     if not log:
         cbar.formatter.set_powerlimits((-3, 3))
         cbar.formatter.set_useMathText(True)
         cbar.update_ticks()
-    cbar.set_label(grids['label'])
+    cbar.set_label(label)
+
+
+# Plot a precomputed slice (grid or scatter) and return the figure.
+def render_slice(grids, slice_axis, slice_pos, title,
+                 vmin, vmax, cmap, log=False, point_size=1.0,
+                 n_contours=0, contour_color='black',
+                 fieldline_color='black', fieldline_density=1.0,
+                 fieldline_broken=False, xlim=None, ylim=None, clean=False):
+    ha, va = _PLOT_AXES[slice_axis]
+    time_val = grids['time']
+    header = title if title is not None else grids['label']
+
+    fig, ax = plt.subplots(figsize=(8, 7))
+    ax.set_aspect('equal', adjustable='box')
+    im = _draw_panel(ax, grids, vmin, vmax, cmap, log, point_size,
+                     n_contours, contour_color, fieldline_color,
+                     fieldline_density, fieldline_broken, xlim, ylim)
+    # append_axes tracks the fixed-aspect host axes, so the colorbar stays
+    # flush with the plot edge (fig.colorbar(ax=ax) leaves a gap there).
+    cax = make_axes_locatable(ax).append_axes("right", size="4%", pad=0.08)
+    _format_cbar(fig.colorbar(im, cax=cax), grids['label'], log)
     ax.set_xlabel(ha)
     ax.set_ylabel(va)
     if not clean:
         ax.set_title(f"{header}, t=[{time_val}]  ({slice_axis}={slice_pos:+.4f})")
         fig.text(0.98, 0.02, f"Resolution: {grids['res_label']}", fontsize=10, ha='right')
+    return fig
+
+
+# Panel layout for n files: a single row up to 3, two rows beyond (2x2, 2x3, ...).
+def _auto_layout(n):
+    return (1, n) if n <= 3 else (2, -(-n // 2))
+
+
+# Panel height/width in data units, so the figure can be sized to the data and
+# the tiled panels pack without gaps.
+def _panel_aspect(g, xlim, ylim):
+    if g.get('mode') == 'scatter':
+        x0, x1, y0, y1 = (g['xs'].min(), g['xs'].max(),
+                          g['ys'].min(), g['ys'].max())
+    else:
+        x0, x1 = g['xi'][0, 0], g['xi'][0, -1]
+        y0, y1 = g['yi'][0, 0], g['yi'][-1, 0]
+    if xlim is not None:
+        x0, x1 = xlim
+    if ylim is not None:
+        y0, y1 = ylim
+    return (y1 - y0) / (x1 - x0) if x1 > x0 else 1.0
+
+
+# Corner tag naming a panel (resolution, scheme, ...).
+def _corner_label(ax, text, color, right=True):
+    ax.text(0.97 if right else 0.03, 0.96, text, transform=ax.transAxes,
+            va='top', ha='right' if right else 'left', color=color)
+
+
+# Tile several precomputed slices into one figure, all drawn against the same
+# color scale and served by a single colorbar. Panels fill row-major and are
+# tagged with labels (one per panel, or one per column) top right and, with
+# label_time, their time top left.
+def render_panels(grids, slice_axis, slice_pos, title, labels, layout,
+                  label_color, label_time, vmin, vmax, cmap, log=False, point_size=1.0,
+                  n_contours=0, contour_color='black',
+                  fieldline_color='black', fieldline_density=1.0,
+                  fieldline_broken=False, xlim=None, ylim=None, clean=False):
+    ha, va = _PLOT_AXES[slice_axis]
+    nrows, ncols = layout if layout is not None else _auto_layout(len(grids))
+    if nrows * ncols < len(grids):
+        sys.exit(f"Error: --layout {nrows} {ncols} holds {nrows * ncols} panels, "
+                 f"but {len(grids)} panels were given")
+    if labels is not None:
+        labels = [labels[k % len(labels)] for k in range(len(grids))]
+
+    # ImageGrid keeps the panels flush and hands the shared colorbar an axes
+    # that tracks their combined height (plain subplots leave ragged gaps
+    # around fixed-aspect axes).
+    pw = 3.6
+    fig = plt.figure(figsize=(ncols * pw + 1.2,
+                              nrows * pw * _panel_aspect(grids[0], xlim, ylim)
+                              + (0.4 if clean else 1.0)))
+    axes = ImageGrid(fig, (0.06, 0.06, 0.88, 0.86 if not clean else 0.90),
+                     nrows_ncols=(nrows, ncols),
+                     axes_pad=(0.08, 0.08 if clean else 0.34), share_all=True,
+                     cbar_mode='single', cbar_location='right',
+                     cbar_size='3%', cbar_pad=0.08)
+
+    im = None
+    for k, ax in enumerate(axes):
+        if k >= len(grids):
+            ax.set_axis_off()
+            continue
+        im = _draw_panel(ax, grids[k], vmin, vmax, cmap, log, point_size,
+                         n_contours, contour_color, fieldline_color,
+                         fieldline_density, fieldline_broken, xlim, ylim)
+        if labels is not None:
+            _corner_label(ax, labels[k], label_color)
+        if label_time:
+            _corner_label(ax, f"t={grids[k]['time']:.1f}", label_color, right=False)
+        if not clean:
+            ax.set_title(f"t={grids[k]['time']:.4g}  ({grids[k]['res_label']})",
+                         fontsize=9)
+        if k % ncols == 0:
+            ax.set_ylabel(va)
+        # bottom-most filled panel of its column, which is not the bottom row
+        # when the last row is partly empty; ImageGrid's label_mode='L' already
+        # hid those, so undo it explicitly
+        if k + ncols >= len(grids):
+            ax.set_xlabel(ha)
+            ax.xaxis.label.set_visible(True)
+            ax.tick_params(labelbottom=True)
+
+    _format_cbar(fig.colorbar(im, cax=axes.cbar_axes[0]), grids[0]['label'], log)
+    if not clean:
+        header = title if title is not None else grids[0]['label']
+        fig.suptitle(f"{header}  ({slice_axis}={slice_pos:+.4f})", y=0.99, va='top')
     return fig
 
 
@@ -274,12 +385,12 @@ def shared_ranges(grids, vmin, vmax, log=False):
     return vmin, vmax
 
 
-def _save_fig(fig, fname, step, field, slice_axis, slice_pos, scatter, clean):
+def _save_fig(fig, fname, step, field, slice_axis, slice_pos, scatter, clean, tag=''):
     outdir = os.path.dirname(os.path.abspath(fname))
     short = field.split('::')[-1]
     suffix = '_scatter' if scatter else ''
     ext = 'pdf' if clean else 'png'
-    outname = os.path.join(outdir, f"slice_{short}_step{step}_{slice_axis}{slice_pos:+.4f}{suffix}.{ext}")
+    outname = os.path.join(outdir, f"slice_{short}_step{step}_{slice_axis}{slice_pos:+.4f}{tag}{suffix}.{ext}")
     fig.savefig(outname, dpi=300 if clean else 150, bbox_inches='tight')
     plt.close(fig)
     print(f"Saved: {outname}")
@@ -364,6 +475,71 @@ def plot_all_steps(fname, steps, field, resolution, slice_axis,
     _pmap(jobs, render, grids)
 
 
+# "a.h5 3 b.h5 c.h5 -2" -> [('a.h5', 3), ('b.h5', None), ('c.h5', -2)]: a bare
+# integer sets the step of the file in front of it, absent means that file's
+# final step. Repeating a file is how two steps of one dump land side by side.
+def _parse_inputs(tokens, parser):
+    panels = []
+    for tok in tokens:
+        if not tok.lstrip('+-').isdigit():
+            panels.append((tok, None))
+        elif not panels:
+            parser.error(f"step {tok} given before any input file")
+        elif panels[-1][1] is not None:
+            parser.error(f"{panels[-1][0]} got two step numbers ({panels[-1][1]}, {tok})")
+        else:
+            panels[-1] = (panels[-1][0], int(tok))
+    return panels
+
+
+# Module-level (picklable) compute of one (file, step) panel. step None means
+# that file's own final step, so runs with different dump counts still line up
+# on t_end; negative steps count back from the end.
+def _compute_panel(item, **kw):
+    fname, step = item
+    if step is None:
+        step = -1
+    if step < 0:
+        step += get_nsteps(fname)
+    return compute_slice_grids(fname, step, **kw)
+
+
+# One tiled figure per panel set, each set a list of (file, step) panels.
+# Panels of a figure always share one color scale; with shared_scale that range
+# additionally spans every figure, so an --all series stays comparable frame to
+# frame.
+def plot_panels(panel_sets, field, resolution, slice_axis,
+                slice_pos, title, vmin, vmax, cmap,
+                log, scatter, point_size,
+                n_contours, contour_color,
+                fieldlines, fieldline_color, fieldline_density,
+                fieldline_broken, xlim, ylim, clean,
+                labels, layout, label_color, label_time, shared_scale, jobs):
+    compute = functools.partial(_compute_panel, field=field, resolution=resolution,
+                                slice_axis=slice_axis, slice_pos=slice_pos,
+                                scatter=scatter, fieldlines=fieldlines)
+    grids = _pmap(jobs, compute, [item for ps in panel_sets for item in ps])
+
+    figures, at = [], 0
+    for ps in panel_sets:
+        figures.append(grids[at:at + len(ps)])
+        at += len(ps)
+
+    if shared_scale:
+        vmin, vmax = shared_ranges(grids, vmin, vmax, log)
+        print(f"Shared {field} scale: [{vmin:.6f}, {vmax:.6f}]" + (" (log)" if log else ""))
+
+    for panel in figures:
+        lo, hi = ((vmin, vmax) if shared_scale
+                  else shared_ranges(panel, vmin, vmax, log))
+        fig = render_panels(panel, slice_axis, slice_pos, title, labels, layout,
+                            label_color, label_time, lo, hi, cmap, log, point_size,
+                            n_contours, contour_color, fieldline_color,
+                            fieldline_density, fieldline_broken, xlim, ylim, clean)
+        _save_fig(fig, panel_sets[0][0][0], panel[0]['step'], field, slice_axis,
+                  slice_pos, scatter, clean, tag='_panels')
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Plot 2D SPH-interpolated slices from SPHEXA HDF5 output.",
@@ -377,11 +553,20 @@ if __name__ == "__main__":
             "  %(prog)s data.h5 5 --axis x --pos 0.5\n"
             "  %(prog)s data.h5 --field rho --fieldlines          rho slice + B field lines\n"
             "  %(prog)s data.h5 --field rho --fieldlines vx,vy,vz  ... + velocity field lines\n"
+            "  %(prog)s a.h5 b.h5 c.h5 d.h5 --labels 128 256 512 1024\n"
+            "                                              2x2 panels, one shared color scale\n"
+            "  %(prog)s a.h5 b.h5 --layout 2 1 --labels a05 SLRB2 --clean\n"
+            "  %(prog)s a.h5 2 b.h5 2 c.h5 2 a.h5 5 b.h5 5 c.h5 5 \\\n"
+            "        --labels 128 256 512 --label-time\n"
+            "                                              3 resolutions x 2 times (rows)\n"
         ),
     )
-    parser.add_argument("file", help="HDF5 input file")
-    parser.add_argument("step", nargs="?", type=int,
-                        help="Step number. Omit to plot the final step.")
+    parser.add_argument("files", nargs="+", metavar="FILE [STEP]",
+                        help="HDF5 input file(s), each optionally followed by its step "
+                             "number (negative counts from the end, absent = final "
+                             "step). Several panels are tiled into one figure with a "
+                             "shared color scale, filling the grid row-major; repeat a "
+                             "file to show two of its steps (see --layout, --labels).")
     parser.add_argument("-i", "--info", action="store_true",
                         help="Print HDF5 metadata + available fields and exit")
     parser.add_argument("-a", "--all", action="store_true",
@@ -396,6 +581,18 @@ if __name__ == "__main__":
                         help="Interpolation grid resolution per side (default: 256)")
     parser.add_argument("--title", default=None,
                         help="Plot title prefix (default: field label)")
+    parser.add_argument("--labels", nargs="+", default=None, metavar="LABEL",
+                        help="Panel annotation drawn in the top-right corner, one per "
+                             "panel (e.g. --labels '$n_x=128$' '$n_x=256$'). One per "
+                             "column also works and repeats down the rows.")
+    parser.add_argument("--label-time", action="store_true",
+                        help="Annotate each panel with its time, top left")
+    parser.add_argument("--label-color", default="white",
+                        help="Panel label color (default: white)")
+    parser.add_argument("--layout", type=int, nargs=2, default=None,
+                        metavar=("ROWS", "COLS"),
+                        help="Panel grid (default: one row up to 3 panels, two rows "
+                             "beyond)")
     parser.add_argument("--clean", action="store_true",
                         help="Publish mode for thesis figures: save PDF instead of PNG, "
                              "drop the title and resolution label (those go in the "
@@ -412,7 +609,8 @@ if __name__ == "__main__":
                         help="Crop the vertical plot axis to [LO, HI] (default: auto)")
     parser.add_argument("--shared-scale", action=argparse.BooleanOptionalAction, default=True,
                         help="With --all, share one colormap range across every frame "
-                             "(default: on). Use --no-shared-scale for per-frame auto-scaling.")
+                             "(default: on). Use --no-shared-scale for per-frame auto-scaling. "
+                             "Panels of one figure always share their scale.")
     parser.add_argument("--cmap", default="RdBu",
                         help="Matplotlib colormap name (default: RdBu)")
     parser.add_argument("-l", "--log", action="store_true",
@@ -441,17 +639,42 @@ if __name__ == "__main__":
                              "Off by default here so closed loops (e.g. MHD loop test) "
                              "run as full circles.")
     parser.add_argument("-j", "--jobs", type=int, default=1, metavar="N",
-                        help="Worker processes for --all (default: 1 = serial). "
+                        help="Worker processes for --all and for multi-file panels "
+                             "(default: 1 = serial). "
                              "In SLURM, pass -j \"$SLURM_CPUS_PER_TASK\".")
 
     args = parser.parse_args()
+    panels = _parse_inputs(args.files, parser)
 
     if args.clean:
         apply_clean_style()
 
     if args.info:
-        print_metadata(args.file)
+        for f in dict.fromkeys(f for f, _ in panels):
+            print_metadata(f)
         sys.exit(0)
+
+    # --all sweeps the steps itself, one figure per step over all files
+    if args.all:
+        if any(s is not None for _, s in panels):
+            parser.error("--all plots every step; drop the explicit step numbers")
+        fnames = [f for f, _ in panels]
+        nsteps = min(get_nsteps(f) for f in fnames)
+        if nsteps == 0:
+            print(f"No steps found in {fnames}")
+            sys.exit(1)
+        panel_sets = [[(f, s) for f in fnames] for s in range(nsteps)]
+    else:
+        panel_sets = [panels]
+
+    n_panels = len(panel_sets[0])
+    nrows, ncols = args.layout if args.layout is not None else _auto_layout(n_panels)
+    if nrows * ncols < n_panels:
+        parser.error(f"--layout {nrows} {ncols} holds {nrows * ncols} panels, "
+                     f"but {n_panels} panels were given")
+    if args.labels is not None and len(args.labels) not in (n_panels, ncols):
+        parser.error(f"--labels got {len(args.labels)} values; expected one per "
+                     f"panel ({n_panels}) or one per column ({ncols})")
 
     fieldlines = None
     if args.fieldlines is not None:
@@ -470,21 +693,25 @@ if __name__ == "__main__":
                   fieldline_broken=args.fieldline_broken,
                   xlim=args.xlim, ylim=args.ylim, clean=args.clean)
 
-    if args.all:
-        nsteps = get_nsteps(args.file)
-        if nsteps == 0:
-            print(f"No steps found in {args.file}")
-            sys.exit(1)
+    # a lone panel with --labels/--label-time still goes through the panel
+    # renderer, so the annotations are available on single-panel figures too
+    if n_panels > 1 or args.labels is not None or args.label_time:
+        if args.all:
+            print(f"Plotting all {nsteps} steps as {n_panels}-panel figures...")
+        plot_panels(panel_sets, labels=args.labels, layout=(nrows, ncols),
+                    label_color=args.label_color, label_time=args.label_time,
+                    shared_scale=args.shared_scale, jobs=args.jobs, **common)
+    elif args.all:
+        fname = panels[0][0]
         print(f"Plotting all {nsteps} steps...")
-        plot_all_steps(args.file, list(range(nsteps)),
+        plot_all_steps(fname, list(range(nsteps)),
                        shared_scale=args.shared_scale, jobs=args.jobs, **common)
     else:
-        if args.step is None:
-            nsteps = get_nsteps(args.file)
+        fname, step = panels[0]
+        if step is None or step < 0:
+            nsteps = get_nsteps(fname)
             if nsteps == 0:
-                print(f"No steps found in {args.file}")
+                print(f"No steps found in {fname}")
                 sys.exit(1)
-            step = nsteps - 1
-        else:
-            step = args.step
-        plot_slice(args.file, step, **common)
+            step = nsteps - 1 if step is None else step + nsteps
+        plot_slice(fname, step, **common)

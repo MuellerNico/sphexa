@@ -306,6 +306,13 @@ def apply_clean_style():
     matplotlib.rcParams['font.serif'] = [CLEAN_FONT, 'Nimbus Roman',
                                          'Liberation Serif', 'STIXGeneral']
     matplotlib.rcParams['mathtext.fontset'] = 'stix'
+    # figures land in the thesis scaled down, so run larger than the mpl default
+    matplotlib.rcParams['font.size'] = 13
+    matplotlib.rcParams['axes.titlesize'] = 14
+    matplotlib.rcParams['axes.labelsize'] = 14
+    matplotlib.rcParams['xtick.labelsize'] = 12
+    matplotlib.rcParams['ytick.labelsize'] = 12
+    matplotlib.rcParams['legend.fontsize'] = 12
 
 
 # --- run colors ---
