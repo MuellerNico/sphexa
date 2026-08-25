@@ -41,8 +41,8 @@ namespace sphexa
 
 template<class DomainType, class ParticleDataType>
 std::unique_ptr<Propagator<DomainType, ParticleDataType>>
-propagatorFactory(const std::string& choice, bool SLR, bool AVswitches, std::ostream& output, size_t rank,
-                  const InitSettings& s)
+propagatorFactory(const std::string& choice, bool SLR, bool mhdSLR, bool AVswitches, std::ostream& output,
+                  size_t rank, const InitSettings& s)
 {
     if (choice == "ve")
     {
@@ -70,11 +70,11 @@ propagatorFactory(const std::string& choice, bool SLR, bool AVswitches, std::ost
     }
     if (choice == "magneto-ve")
     {
-        return PropLib<DomainType, ParticleDataType>::makeMagnetoHydroProp(output, rank, s, SLR, AVswitches);
+        return PropLib<DomainType, ParticleDataType>::makeMagnetoHydroProp(output, rank, s, SLR, mhdSLR, AVswitches);
     }
     if (choice == "magneto-turb-ve")
     {
-        return PropLib<DomainType, ParticleDataType>::makeMagnetoTurbProp(output, rank, s, SLR, AVswitches);
+        return PropLib<DomainType, ParticleDataType>::makeMagnetoTurbProp(output, rank, s, SLR, mhdSLR, AVswitches);
     }
 #ifdef SPH_EXA_HAVE_DISKS
     if (choice == "std-disk") { return PropLib<DomainType, ParticleDataType>::makeDiskProp(output, rank, s); }

@@ -96,7 +96,6 @@ int main(int argc, char** argv)
     const std::string        glassBlock   = parser.get("--glass");
     const std::string        propChoice   = parser.get("--prop", std::string("ve"));
     const std::string        resistivity  = parser.get("--resistivity", std::string("SLR"));
-    const double             conductivity = parser.get("--conductivity", 0.0);
     const std::string        maxStepStr   = parser.get("-s", std::string("200"));
     std::vector<std::string> writeExtra   = parser.getCommaList("--wextra");
     std::vector<std::string> outputFields = parser.getCommaList("-f");
@@ -116,6 +115,22 @@ int main(int argc, char** argv)
     sph::NeighborhoodType    nbChoice = nbTypeFromName(parser.get("--neighbor-search", std::string("always-traverse")));
     const bool               initFromFile = fs::exists(strBeforeSign(initCond, ":")) || fs::exists(strBeforeSign(initCond, ","));
 
+    const bool isMagneto = propChoice == "magneto-ve" || propChoice == "magneto-turb-ve";
+
+    // SLR selects a propagator template specialization, so --resistivity has to be resolved before the factory call
+    bool   mhdSLR      = true;
+    double alphaBConst = 1.0;
+    if (isMagneto && resistivity != "SLR" && resistivity != "slr")
+    {
+        try { alphaBConst = std::stod(resistivity); }
+        catch (const std::exception&)
+        {
+            throw std::runtime_error("invalid --resistivity value '" + resistivity +
+                                     "': expected \"SLR\" or a number");
+        }
+        mhdSLR = false;
+    }
+
     std::ofstream nullOutput("/dev/null");
     std::ostream& output = (quiet || rank) ? nullOutput : std::cout;
     std::ofstream constantsFile(fs::path(outFile).parent_path() / fs::path("constants.txt"));
@@ -124,7 +139,8 @@ int main(int argc, char** argv)
     auto fileWriter  = fileWriterFactory(ascii, MPI_COMM_WORLD);
     auto fileReader  = fileReaderFactory(ascii, MPI_COMM_WORLD);
     auto simInit     = initializerFactory<Dataset>(initCond, glassBlock, fileReader.get());
-    auto propagator  = propagatorFactory<Domain, Dataset>(propChoice, SLR, AVswitches, output, rank, simInit->constants());
+    auto propagator  = propagatorFactory<Domain, Dataset>(propChoice, SLR, mhdSLR, AVswitches, output, rank,
+                                                         simInit->constants());
     auto observables = observablesFactory<Dataset>(simInit->constants(), constantsFile);
 
     Dataset simData;
@@ -164,28 +180,7 @@ int main(int argc, char** argv)
     bool  haveGrav = (d.g != 0.0);
     float theta    = parser.get("--theta", haveGrav ? 0.5f : 1.0f);
 
-    if (propChoice == "magneto-ve" || propChoice == "magneto-turb-ve")
-    {
-        using sph::magneto::ResistivityScheme;
-        if (resistivity == "switch") { md.resistivityScheme = ResistivityScheme::Switch; }
-        else if (resistivity == "SLR" || resistivity == "slr") { md.resistivityScheme = ResistivityScheme::SLR; }
-        else if (resistivity == "SLRB" || resistivity == "slrb") { md.resistivityScheme = ResistivityScheme::SLRB; }
-        else if (resistivity == "SLRB2" || resistivity == "slrb2") { md.resistivityScheme = ResistivityScheme::SLRB2; }
-        else
-        {
-            try { md.alpha_B_const = std::stod(resistivity); }
-            catch (const std::exception&)
-            {
-                throw std::runtime_error("invalid --resistivity value '" + resistivity +
-                                         "': expected \"switch\", \"SLR\", \"SLRB\", \"SLRB2\", or a number");
-            }
-            md.resistivityScheme = ResistivityScheme::Constant;
-        }
-
-        if (parser.exists("--arfloor")) { md.arFloor = parser.get<double>("--arfloor"); }
-
-        md.alpha_u = conductivity;
-    }
+    if (isMagneto) { md.alpha_B_const = alphaBConst; }
 
     if (!parser.exists("-o")) { outFile += fileWriter->suffix(); }
     if (writeEnabled) { writeSettings(simInit->constants(), outFile, fileWriter.get()); }
@@ -325,15 +320,8 @@ void printHelp(char* name, int rank)
         printf("\t--prop STRING \t Choice of SPH propagator [default: modern SPH]. For standard SPH, use \"std\" \n\n");
 
         printf("\t--resistivity STRING \t Artificial resistivity for the magneto-ve propagator:\n"
-               "\t\t\t \"switch\" (Tricco & Price 2013), \"SLR\" (slope-limited reconstruction of B),\n"
-               "\t\t\t \"SLRB\"/\"SLRB2\" (SLR + Balsara-like modulation, power 1/2),\n"
-               "\t\t\t or a number to set a constant alpha_B [default: SLR]\n\n");
-
-        printf("\t--arfloor NUM \t Floor F in the SLRB/SLRB2 resistivity clamp Lij = max(F, modulator).\n"
-               "\t\t\t 1.0 disables the Lij floor [default: 1.0]\n\n");
-
-        printf("\t--conductivity NUM \t Artificial conductivity coefficient alpha_u for the magneto-ve propagator.\n"
-               "\t\t\t 0 disables the AV heat conduction term [default: 0]\n\n");
+               "\t\t\t \"SLR\" (slope-limited reconstruction of B) or a number to set a\n"
+               "\t\t\t constant alpha_B [default: SLR]\n\n");
 
         printf("\t-s NUM \t\t int(NUM):  Number of iterations (time-steps) [200],\n\
                 \t real(NUM): Time of simulation (time-model)\n\n");

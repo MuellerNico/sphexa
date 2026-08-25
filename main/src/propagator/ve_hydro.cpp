@@ -66,34 +66,52 @@ PropLib<DomainType, ParticleDataType>::makeTurbVeProp(std::ostream& output, size
 template<class DomainType, class ParticleDataType>
 std::unique_ptr<Propagator<DomainType, ParticleDataType>>
 PropLib<DomainType, ParticleDataType>::makeMagnetoHydroProp(std::ostream& output, size_t rank,
-                                                            const InitSettings& settings, bool SLR, bool AVswitches)
+                                                            const InitSettings& settings, bool SLR, bool mhdSLR,
+                                                            bool AVswitches)
 {
+    if (SLR && mhdSLR)
+    {
+        return std::make_unique<magneto::MagnetoHydroProp<true, true, DomainType, ParticleDataType>>(output, rank,
+                                                                                                     AVswitches);
+    }
     if (SLR)
     {
-        return std::make_unique<magneto::MagnetoHydroProp<true, DomainType, ParticleDataType>>(output, rank, AVswitches);
+        return std::make_unique<magneto::MagnetoHydroProp<true, false, DomainType, ParticleDataType>>(output, rank,
+                                                                                                      AVswitches);
     }
-    else
+    if (mhdSLR)
     {
-        return std::make_unique<magneto::MagnetoHydroProp<false, DomainType, ParticleDataType>>(output, rank,
-                                                                                                AVswitches);
+        return std::make_unique<magneto::MagnetoHydroProp<false, true, DomainType, ParticleDataType>>(output, rank,
+                                                                                                      AVswitches);
     }
+    return std::make_unique<magneto::MagnetoHydroProp<false, false, DomainType, ParticleDataType>>(output, rank,
+                                                                                                   AVswitches);
 }
 
 template<class DomainType, class ParticleDataType>
 std::unique_ptr<Propagator<DomainType, ParticleDataType>>
 PropLib<DomainType, ParticleDataType>::makeMagnetoTurbProp(std::ostream& output, size_t rank,
-                                                           const InitSettings& settings, bool SLR, bool AVswitches)
+                                                           const InitSettings& settings, bool SLR, bool mhdSLR,
+                                                           bool AVswitches)
 {
+    if (SLR && mhdSLR)
+    {
+        return std::make_unique<magneto::MagnetoTurbProp<true, true, DomainType, ParticleDataType>>(
+            output, rank, settings, AVswitches);
+    }
     if (SLR)
     {
-        return std::make_unique<magneto::MagnetoTurbProp<true, DomainType, ParticleDataType>>(output, rank, settings,
-                                                                                              AVswitches);
+        return std::make_unique<magneto::MagnetoTurbProp<true, false, DomainType, ParticleDataType>>(
+            output, rank, settings, AVswitches);
     }
-    else
+    if (mhdSLR)
     {
-        return std::make_unique<magneto::MagnetoTurbProp<false, DomainType, ParticleDataType>>(output, rank, settings,
-                                                                                               AVswitches);
+        return std::make_unique<magneto::MagnetoTurbProp<false, true, DomainType, ParticleDataType>>(
+            output, rank, settings, AVswitches);
     }
+    return std::make_unique<magneto::MagnetoTurbProp<false, false, DomainType, ParticleDataType>>(output, rank,
+                                                                                                  settings,
+                                                                                                  AVswitches);
 }
 
 #ifdef USE_CUDA

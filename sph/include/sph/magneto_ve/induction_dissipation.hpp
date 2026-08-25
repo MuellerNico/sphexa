@@ -35,7 +35,15 @@
 namespace sph::magneto
 {
 
-template<class Tc, class SimulationData>
+//! @brief SLR reconstructs B_ab directly and needs no amplitude; otherwise alpha_B is the --resistivity constant
+template<bool SLR, class MagnetoData>
+auto alphaB(const MagnetoData& md)
+{
+    return SLR ? decltype(md.alpha_B_const)(1) : md.alpha_B_const;
+}
+
+
+template<bool SLR, class Tc, class SimulationData>
 void computeInductionAndDissipation(const GroupView& grp, SimulationData& sim, const cstone::Box<Tc>& box)
 {
     auto& d  = sim.hydro;
@@ -43,15 +51,14 @@ void computeInductionAndDissipation(const GroupView& grp, SimulationData& sim, c
 
     if constexpr (cstone::HaveGpu<typename SimulationData::AcceleratorType>{})
     {
-        cuda::computeInductionAndDissipationGpu(grp, d, md, box);
+        cuda::computeInductionAndDissipationGpu<SLR>(grp, d, md, box);
     }
     else
     {
-        inductionAndDissipationIjLoop(
-            d.neighborhood, d.K, md.mu_0, md.resistivityScheme, md.arFloor, d.vx.data(), d.vy.data(), d.vz.data(),
-            d.c.data(),
+        inductionAndDissipationIjLoop<SLR>(
+            d.neighborhood, d.K, md.mu_0, alphaB<SLR>(md), d.vx.data(), d.vy.data(), d.vz.data(), d.c.data(),
             md.Bx.data(), md.By.data(), md.Bz.data(), d.m.data(), d.xm.data(), d.kx.data(), d.gradh.data(),
-            d.c11.data(), d.c12.data(), d.c13.data(), d.c22.data(), d.c23.data(), d.c33.data(), md.alpha_B.data(),
+            d.c11.data(), d.c12.data(), d.c13.data(), d.c22.data(), d.c23.data(), d.c33.data(),
             md.psi_ch.data(), d.nc.data(), md.dBxdx.data(), md.dBxdy.data(), md.dBxdz.data(), md.dBydx.data(),
             md.dBydy.data(), md.dBydz.data(), md.dBzdx.data(), md.dBzdy.data(), md.dBzdz.data(), md.dvxdx.data(),
             md.dvxdy.data(), md.dvxdz.data(), md.dvydx.data(), md.dvydy.data(), md.dvydz.data(), md.dvzdx.data(),

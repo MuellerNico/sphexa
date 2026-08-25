@@ -35,7 +35,6 @@
 #include "sph/kernels.hpp"
 #include "sph/table_lookup.hpp"
 
-#include "resistivity.hpp"
 #include "mhd_kernels.hpp"
 
 namespace sph::magneto
@@ -44,26 +43,29 @@ namespace sph::magneto
 static constexpr float fclean  = 1.0;
 static constexpr float sigma_c = 1.0;
 
-template<class T>
+/*! @brief layout of the ijLoop input tuple, see inductionAndDissipationIjLoop
+ *
+ * The SLR-only block (nc + the 9 B-gradient components) is appended behind the common fields so that the
+ * interaction and the postamble can each destructure the slice they need, independent of the scheme.
+ */
+static constexpr std::size_t numInteractionInputs = 21; //!< i, pos, h + vx .. psi_ch
+static constexpr std::size_t numPostambleInputs   = 32; //!< the above + dvxdx .. dvzdz, divB_conj, du
+
+template<bool SLR, class T>
 struct InductionAndDissipationInteraction
 {
-    const T*          wh;
-    T                 mu_0;
-    T                 arFloor; // 1=disabled
-    ResistivityScheme scheme;
+    const T* wh;
+    T        mu_0;
+    T        alpha_B; //!< 1 for SLR (raw reconstruction), the --resistivity constant otherwise
 
     template<class ParticleData, class Tc>
     constexpr auto operator()(const ParticleData& iData, const ParticleData& jData, cstone::Vec3<Tc> const& r_ij,
                               T r2) const
     {
         const auto [i, iPos, hi, vxi, vyi, vzi, ci, Bxi, Byi, Bzi, mi, xmassi, kxi, gradhi, c11i, c12i, c13i, c22i,
-                    c23i, c33i, alpha_Bi, psi_ch_i, nci, dBxdxi, dBxdyi, dBxdzi, dBydxi, dBydyi, dBydzi, dBzdxi,
-                    dBzdyi, dBzdzi, dvxdxi, dvxdyi, dvxdzi, dvydxi, dvydyi, dvydzi, dvzdxi, dvzdyi, dvzdzi, divB_conj_i,
-                    dui] = iData;
+                    c23i, c33i, psi_ch_i] = tupleHead<numInteractionInputs>(iData);
         const auto [j, jPos, hj, vxj, vyj, vzj, cj, Bxj, Byj, Bzj, mj, xmassj, kxj, gradhj, c11j, c12j, c13j, c22j,
-                    c23j, c33j, alpha_Bj, psi_ch_j, ncj, dBxdxj, dBxdyj, dBxdzj, dBydxj, dBydyj, dBydzj, dBzdxj,
-                    dBzdyj, dBzdzj, dvxdxj, dvxdyj, dvxdzj, dvydxj, dvydyj, dvydzj, dvzdxj, dvzdyj, dvzdzj, divB_conj_j,
-                    duj] = jData;
+                    c23j, c33j, psi_ch_j] = tupleHead<numInteractionInputs>(jData);
 
         T rhoi = kxi * mi / xmassi;
         T rhoj = kxj * mj / xmassj;
@@ -94,66 +96,37 @@ struct InductionAndDissipationInteraction
         termAj[0] = -(c11j * rx + c12j * ry + c13j * rz) * Wj;
         termAj[1] = -(c12j * rx + c22j * ry + c23j * rz) * Wj;
         termAj[2] = -(c13j * rx + c23j * ry + c33j * rz) * Wj;
-        
+
         cstone::Vec3<Tc> v_ij          = {vxi - vxj, vyi - vyj, vzi - vzj};
         cstone::Vec3<Tc> vab_cross_rab = cross(v_ij, r_ij);
 
-        T v_sigB      = (i == j) ? T(0) : T(std::sqrt(norm2(vab_cross_rab) / r2));
-        T alpha_B_avg = T(0.5) * (alpha_Bi + alpha_Bj);
+        T v_sigB = (i == j) ? T(0) : T(std::sqrt(norm2(vab_cross_rab) / r2));
 
         cstone::Vec3<Tc> B_ab{Bxi - Bxj, Byi - Byj, Bzi - Bzj};
         cstone::Vec3<Tc> B_ab_raw = B_ab; // pre-reconstruction, needed for energy conjugate
-        T Lij = T(1);
 
-        if (scheme == ResistivityScheme::SLR || scheme == ResistivityScheme::SLRB ||
-            scheme == ResistivityScheme::SLRB2)
+        if constexpr (SLR)
         {
-            cstone::Vec3<T> gradBx_i{dBxdxi, dBxdyi, dBxdzi};
-            cstone::Vec3<T> gradBy_i{dBydxi, dBydyi, dBydzi};
-            cstone::Vec3<T> gradBz_i{dBzdxi, dBzdyi, dBzdzi};
-            cstone::Vec3<T> gradBx_j{dBxdxj, dBxdyj, dBxdzj};
-            cstone::Vec3<T> gradBy_j{dBydxj, dBydyj, dBydzj};
-            cstone::Vec3<T> gradBz_j{dBzdxj, dBzdyj, dBzdzj};
+            const auto [nci, dBxdxi, dBxdyi, dBxdzi, dBydxi, dBydyi, dBydzi, dBzdxi, dBzdyi, dBzdzi] =
+                tupleTail<numPostambleInputs>(iData);
+            const auto [ncj, dBxdxj, dBxdyj, dBxdzj, dBydxj, dBydyj, dBydzj, dBzdxj, dBzdyj, dBzdzj] =
+                tupleTail<numPostambleInputs>(jData);
 
-            // SLR: pure reconstruction (balsi=balsj=1, Lij=1). SLRB/SLRB2: Balsara-like modulation.
-            T balsi = T(1);
-            T balsj = T(1);
-            if (scheme == ResistivityScheme::SLRB || scheme == ResistivityScheme::SLRB2)
-            {
-                T B_norm_i     = std::sqrt(Bxi * Bxi + Byi * Byi + Bzi * Bzi);
-                T B_norm_j     = std::sqrt(Bxj * Bxj + Byj * Byj + Bzj * Bzj);
-                T gradB_norm_i = std::sqrt(norm2(gradBx_i) + norm2(gradBy_i) + norm2(gradBz_i));
-                T gradB_norm_j = std::sqrt(norm2(gradBx_j) + norm2(gradBy_j) + norm2(gradBz_j));
-                T modulator_i  = (B_norm_i > T(0)) ? hi * gradB_norm_i / B_norm_i : T(1);
-                T modulator_j  = (B_norm_j > T(0)) ? hj * gradB_norm_j / B_norm_j : T(1);
-                modulator_i    = stl::max(T(0), stl::min(modulator_i, T(1))); // clamp to [0,1]
-                modulator_j    = stl::max(T(0), stl::min(modulator_j, T(1)));
-                Lij            = stl::max(arFloor, T(0.5) * (modulator_i + modulator_j));
-                if (scheme == ResistivityScheme::SLRB)
-                {
-                    balsi = T(1) - modulator_i;
-                    balsj = T(1) - modulator_j;
-                }
-                else // SLRB2
-                {
-                    balsi = T(1) - modulator_i * modulator_i;
-                    balsj = T(1) - modulator_j * modulator_j;
-                }
-            }
             T  eta_crit_i = std::cbrt(T(32) * T(M_PI) / T(3) / T(nci));
             Tc eta_ab     = (v1 < v2) ? v1 : v2; // spacing in units of h
-            B_ab += mhdSLRCorrection<Tc, T>(r_ij, eta_ab, eta_crit_i, balsi, balsj, gradBx_i, gradBy_i, gradBz_i,
-                                            gradBx_j, gradBy_j, gradBz_j);
+            B_ab += mhdSLRCorrection<Tc, T>(r_ij, eta_ab, eta_crit_i, {dBxdxi, dBxdyi, dBxdzi},
+                                            {dBydxi, dBydyi, dBydzi}, {dBzdxi, dBzdyi, dBzdzi},
+                                            {dBxdxj, dBxdyj, dBxdzj}, {dBydxj, dBydyj, dBydzj},
+                                            {dBzdxj, dBzdyj, dBzdzj});
         }
 
         // Conjugate-pair (non-symmetric) artificial resistivity (Price et al. 2018, eqs. 181-182)
         T grkern_i = dot(r_ij, termAi) * distInv / (rhoi * rhoi); // gradient kernel r̂·∇W/ρ²
         T grkern_j = dot(r_ij, termAj) * distInv / (rhoj * rhoj);
-        T resistivity_ab = Lij * alpha_B_avg * v_sigB;
-        T diss_op = T(0.5) * mj * rhoi * resistivity_ab * (grkern_i + grkern_j);
+        T diss_op  = T(0.5) * mj * rhoi * alpha_B * v_sigB * (grkern_i + grkern_j);
 
         cstone::Vec3<Tc> dB_diss = diss_op * B_ab;
-        T du_diss = diss_op * dot(B_ab_raw, B_ab);
+        T                du_diss = diss_op * dot(B_ab_raw, B_ab);
 
         // wave cleaning speeds
         T v_alfven2i = (Bxi * Bxi + Byi * Byi + Bzi * Bzi) / (mu_0 * rhoi);
@@ -181,9 +154,8 @@ struct InductionAndDissipationPostamble
     constexpr auto operator()(const ParticleData& iData, const Result& result) const
     {
         const auto [i, iPos, hi, vxi, vyi, vzi, ci, Bxi, Byi, Bzi, mi, xmassi, kxi, gradhi, c11i, c12i, c13i, c22i,
-                    c23i, c33i, alpha_Bi, psi_ch_i, nci, dBxdxi, dBxdyi, dBxdzi, dBydxi, dBydyi, dBydzi, dBzdxi,
-                    dBzdyi, dBzdzi, dvxdxi, dvxdyi, dvxdzi, dvydxi, dvydyi, dvydzi, dvzdxi, dvzdyi, dvzdzi, divB_conj_i,
-                    dui] = iData;
+                    c23i, c33i, psi_ch_i, dvxdxi, dvxdyi, dvxdzi, dvydxi, dvydyi, dvydzi, dvzdxi, dvzdyi,
+                    dvzdzi, divB_conj_i, dui] = tupleHead<numPostambleInputs>(iData);
         auto [dB_diss_x, dB_diss_y, dB_diss_z, divB_clean_x, divB_clean_y, divB_clean_z, du_diss] = result;
 
         // Ideal induction equation
@@ -215,25 +187,38 @@ struct InductionAndDissipationPostamble
     }
 };
 
-template<class Neighborhood, class Tc, class T, class Tm>
+template<bool SLR, class Neighborhood, class Tc, class T, class Tm>
 void inductionAndDissipationIjLoop(
-    Neighborhood const& neighborhood, Tc K, Tc mu_0, ResistivityScheme scheme, T arFloor, const T* vx, const T* vy,
-    const T* vz,
-    const T* c, const Tc* Bx, const Tc* By, const Tc* Bz, const Tm* m, const T* xm, const T* kx, const T* gradh,
-    const T* c11, const T* c12, const T* c13, const T* c22, const T* c23, const T* c33, const T* alpha_B,
-    const T* psi_ch, const unsigned* nc, const T* dBxdx, const T* dBxdy, const T* dBxdz, const T* dBydx,
-    const T* dBydy, const T* dBydz, const T* dBzdx, const T* dBzdy, const T* dBzdz, const T* dvxdx, const T* dvxdy,
-    const T* dvxdz, const T* dvydx, const T* dvydy, const T* dvydz, const T* dvzdx, const T* dvzdy, const T* dvzdz,
-    const T* divB_conj, const T* wh, Tc* dBx_dt, Tc* dBy_dt, Tc* dBz_dt, Tc* du, T* d_psi_ch, Tc* dB_diss_x,
-    Tc* dB_diss_y, Tc* dB_diss_z, Tc* du_diss)
+    Neighborhood const& neighborhood, Tc K, Tc mu_0, Tc alpha_B, const T* vx, const T* vy, const T* vz, const T* c,
+    const Tc* Bx, const Tc* By, const Tc* Bz, const Tm* m, const T* xm, const T* kx, const T* gradh, const T* c11,
+    const T* c12, const T* c13, const T* c22, const T* c23, const T* c33, const T* psi_ch, const unsigned* nc,
+    const T* dBxdx, const T* dBxdy, const T* dBxdz, const T* dBydx, const T* dBydy, const T* dBydz, const T* dBzdx,
+    const T* dBzdy, const T* dBzdz, const T* dvxdx, const T* dvxdy, const T* dvxdz, const T* dvydx, const T* dvydy,
+    const T* dvydz, const T* dvzdx, const T* dvzdy, const T* dvzdz, const T* divB_conj, const T* wh, Tc* dBx_dt,
+    Tc* dBy_dt, Tc* dBz_dt, Tc* du, T* d_psi_ch, Tc* dB_diss_x, Tc* dB_diss_y, Tc* dB_diss_z, Tc* du_diss)
 {
-    const auto input =
-        std::make_tuple(vx, vy, vz, c, Bx, By, Bz, m, xm, kx, gradh, c11, c12, c13, c22, c23, c33, alpha_B, psi_ch, nc,
-                        dBxdx, dBxdy, dBxdz, dBydx, dBydy, dBydz, dBzdx, dBzdy, dBzdz, dvxdx, dvxdy, dvxdz, dvydx,
-                        dvydy, dvydz, dvzdx, dvzdy, dvzdz, divB_conj, du);
+    // the postamble slice must cover everything up to and including du, the SLR-only block is appended after it
+    const auto commonInput =
+        std::make_tuple(vx, vy, vz, c, Bx, By, Bz, m, xm, kx, gradh, c11, c12, c13, c22, c23, c33, psi_ch, dvxdx,
+                        dvxdy, dvxdz, dvydx, dvydy, dvydz, dvzdx, dvzdy, dvzdz, divB_conj, du);
     const auto output = std::make_tuple(dBx_dt, dBy_dt, dBz_dt, du, d_psi_ch, dB_diss_x, dB_diss_y, dB_diss_z, du_diss);
-    neighborhood.ijLoop(input, output, InductionAndDissipationInteraction<T>{wh, T(mu_0), arFloor, scheme},
-                        InductionAndDissipationPostamble<T, Tc>{K, T(mu_0)});
+
+    // +3 for the index, position and h that loadParticleData prepends. A mismatch here would silently shift
+    // every name in the postamble's structured binding.
+    static_assert(std::tuple_size_v<decltype(commonInput)> + 3 == numPostambleInputs);
+
+    if constexpr (SLR)
+    {
+        const auto input = std::tuple_cat(
+            commonInput, std::make_tuple(nc, dBxdx, dBxdy, dBxdz, dBydx, dBydy, dBydz, dBzdx, dBzdy, dBzdz));
+        neighborhood.ijLoop(input, output, InductionAndDissipationInteraction<true, T>{wh, T(mu_0), T(alpha_B)},
+                            InductionAndDissipationPostamble<T, Tc>{K, T(mu_0)});
+    }
+    else
+    {
+        neighborhood.ijLoop(commonInput, output, InductionAndDissipationInteraction<false, T>{wh, T(mu_0), T(alpha_B)},
+                            InductionAndDissipationPostamble<T, Tc>{K, T(mu_0)});
+    }
 }
 
 } // namespace sph::magneto

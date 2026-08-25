@@ -75,13 +75,13 @@ extern void computePolytropicEOS_HydroStd(size_t firstParticle, size_t lastParti
 namespace magneto::cuda
 {
 
-template<class HydroData, class MagnetoData>
+template<bool SLR, class HydroData, class MagnetoData>
 extern void computeIadFullDivvCurlv(const GroupView&, HydroData& d, MagnetoData& m,
                                     const cstone::Box<typename HydroData::RealType>& box);
 template<bool avClean, class HydroData, class MagnetoData>
 extern void computeMagneticMomentumEnergy(const GroupView& grp, float* groupDt, HydroData& d, MagnetoData& m,
                                           const cstone::Box<typename HydroData::RealType>& box);
-template<class HydroData, class MagnetoData>
+template<bool SLR, class HydroData, class MagnetoData>
 extern void computeInductionAndDissipationGpu(const GroupView& grp, HydroData& d, MagnetoData& m,
                                               const cstone::Box<typename HydroData::RealType>& box);
 template<class MagnetoData>

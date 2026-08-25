@@ -45,7 +45,7 @@ namespace sphexa::magneto
 using namespace sph;
 using util::FieldList;
 
-template<bool SLR, class DomainType, class DataType>
+template<bool SLR, bool MhdSLR, class DomainType, class DataType>
 class MagnetoHydroProp : public Propagator<DomainType, DataType>
 {
 protected:
@@ -78,10 +78,15 @@ protected:
     //! @brief list of dependent fields, these may be used as scratch space during domain sync
     using DependentFieldsHydro = FieldList<"ax", "ay", "az", "prho", "c", "p", "u", "du", "c11", "c12", "c13", "c22",
                                            "c23", "c33", "xm", "kx", "nc", "divv", "curlv", "gradh", "dtCourant">;
-    using DependentFieldsMagneto =
+    using DependentFieldsMagnetoCommon =
         FieldList<"dvxdx", "dvxdy", " dvxdz", "dvydx", "dvydy", "dvydz", "dvzdx", "dvzdy", "dvzdz", "divB", "divB_conj",
-                  "curlB_x", "curlB_y", "curlB_z", "gradB_norm", "alpha_B", "dBxdx", "dBxdy", "dBxdz", "dBydx", "dBydy",
-                  "dBydz", "dBzdx", "dBzdy", "dBzdz", "dB_diss_x", "dB_diss_y", "dB_diss_z", "du_diss">;
+                  "curlB_x", "curlB_y", "curlB_z", "gradB_norm", "dB_diss_x", "dB_diss_y", "dB_diss_z", "du_diss">;
+    //! @brief the B-field Jacobian is only read back by the SLR reconstruction in the induction kernel
+    using BGradientFields =
+        FieldList<"dBxdx", "dBxdy", "dBxdz", "dBydx", "dBydy", "dBydz", "dBzdx", "dBzdy", "dBzdz">;
+    using DependentFieldsMagneto =
+        std::conditional_t<MhdSLR, util::FuseValueList<DependentFieldsMagnetoCommon, BGradientFields>,
+                           DependentFieldsMagnetoCommon>;
 
 public:
     MagnetoHydroProp(std::ostream& output, size_t rank, bool AVswitches)
@@ -89,6 +94,7 @@ public:
         , AVswitches_(AVswitches)
     {
         if (SLR && rank == 0) { std::cout << "SLR is activated" << std::endl; }
+        if (MhdSLR && rank == 0) { std::cout << "SLR resistivity is activated" << std::endl; }
         if (AVswitches_ && rank == 0) { std::cout << "AV switches are activated" << std::endl; }
     }
 
@@ -161,15 +167,15 @@ public:
         timer.step("mpi::synchronizeHalos");
 
         computeVe(groups_.view(), d, domain.box());
-        timer.step("Normalization & Gradh");
+        timer.step("Generalized Volume Elements");
 
-        domain.exchangeHalos(get<"vx", "vy", "vz", "kx">(d), get<"ax">(d), get<"keys">(d));
-        domain.exchangeHalos(get<"Bx", "By", "Bz">(md), get<"ax">(d), get<"keys">(d));
+        domain.exchangeHalos(std::tuple_cat(get<"vx", "vy", "vz", "kx">(d), get<"Bx", "By", "Bz">(md)),
+                             get<"ax">(d), get<"keys">(d));
         timer.step("mpi::synchronizeHalos");
 
-        sph::magneto::computeIadFullDivvCurlv(groups_.view(), simData, domain.box());
+        sph::magneto::computeIadFullDivvCurlv<MhdSLR>(groups_.view(), simData, domain.box());
         d.minDtRho = rhoTimestep(first, last, d);
-        timer.step("IadDivCurlGradh");
+        timer.step("IadVelocityDivCurlGradh");
 
         computeEOS(first, last, d);
         timer.step("EquationOfState");
@@ -184,23 +190,34 @@ public:
             timer.step("AVswitches");
         }
 
-        domain.exchangeHalos(get<"alpha", "gradh", "p", "u">(d), get<"ax">(d), get<"keys">(d));
-        domain.exchangeHalos(get<"dvxdx", "dvxdy", " dvxdz", "dvydx", "dvydy", "dvydz", "dvzdx", "dvzdy", "dvzdz">(md),
+        /* Single halo round for everything MomentumAndEnergy and InductionAndDissipation read at neighbors.
+         * psi_ch is conserved and the B-Jacobian was written by IadVelocityDivCurlGradh, so both are already
+         * final here -- no need to wait until after MomentumAndEnergy, which touches neither.
+         * The velocity Jacobian is only read at j by the SLR reconstruction in MomentumAndEnergy; the induction
+         * kernel uses it at i only. divB, divB_conj, curlB_* and gradB_norm are i-local throughout.
+         */
+        auto velocityJacobian = [&md]()
+        {
+            if constexpr (SLR)
+            {
+                return get<"dvxdx", "dvxdy", " dvxdz", "dvydx", "dvydy", "dvydz", "dvzdx", "dvzdy", "dvzdz">(md);
+            }
+            else { return std::tuple<>{}; }
+        }();
+        auto bJacobian = [&md]()
+        {
+            if constexpr (MhdSLR) { return get<BGradientFields>(md); }
+            else { return std::tuple<>{}; }
+        }();
+        domain.exchangeHalos(std::tuple_cat(get<"alpha", "gradh", "p">(d), std::tie(get<"psi_ch">(md)),
+                                            velocityJacobian, bJacobian),
                              get<"ax">(d), get<"keys">(d));
         timer.step("mpi::synchronizeHalos");
 
         sph::magneto::computeMomentumEnergy<SLR>(groups_.view(), nullptr, simData, domain.box());
-        timer.step("MagneticMomentumAndEnergy");
+        timer.step("MomentumAndEnergy");
 
-        // scratch: ax/ay/az hold the accelerations from computeMomentumEnergy, so prho stands in.
-        // Not divv/curlv -- they survive to the dump as diagnostics; prho does not (recomputed by
-        // computeEOS every step, already documented as destroyed by output time).
-        domain.exchangeHalos(get<"divB_conj", "curlB_x", "curlB_y", "curlB_z", "psi_ch", "alpha_B", "dBxdx", "dBxdy",
-                                 "dBxdz", "dBydx", "dBydy", "dBydz", "dBzdx", "dBzdy", "dBzdz">(md),
-                             get<"prho">(d), get<"keys">(d));
-        timer.step("mpi::synchronizeHalos");
-
-        sph::magneto::computeInductionAndDissipation(groups_.view(), simData, domain.box());
+        sph::magneto::computeInductionAndDissipation<MhdSLR>(groups_.view(), simData, domain.box());
         timer.step("InductionAndDissipation");
         pmReader.step();
 

@@ -44,16 +44,16 @@ template<bool SLR, class T>
 struct MagneticMomentumAndEnergyInteraction
 {
     const T* wh;
-    T        mu_0, alpha_u, Atmin, Atmax, ramp, avFloor;
+    T        mu_0, Atmin, Atmax, ramp, avFloor;
 
     template<class ParticleData, class Tc>
     constexpr auto operator()(const ParticleData& iData, const ParticleData& jData, cstone::Vec3<Tc> const& r_ij,
                               T r2) const
     {
-        const auto [i, iPos, hi, vxi, vyi, vzi, mi, ci, ui, kxi, alpha_i, xmassi, pi, gradhi, c11i, c12i, c13i, c22i,
+        const auto [i, iPos, hi, vxi, vyi, vzi, mi, ci, kxi, alpha_i, xmassi, pi, gradhi, c11i, c12i, c13i, c22i,
                     c23i, c33i, nci, Bxi, Byi, Bzi, dvxdxi, dvxdyi, dvxdzi, dvydxi, dvydyi, dvydzi, dvzdxi, dvzdyi,
                     dvzdzi, tdpdTrhoi, divvi, curlvi] = iData;
-        const auto [j, jPos, hj, vxj, vyj, vzj, mj, cj, uj, kxj, alpha_j, xmassj, pj, gradhj, c11j, c12j, c13j, c22j,
+        const auto [j, jPos, hj, vxj, vyj, vzj, mj, cj, kxj, alpha_j, xmassj, pj, gradhj, c11j, c12j, c13j, c22j,
                     c23j, c33j, ncj, Bxj, Byj, Bzj, dvxdxj, dvxdyj, dvxdzj, dvydxj, dvydyj, dvydzj, dvzdxj, dvzdyj,
                     dvzdzj, tdpdTrhoj, divvj, curlvj] = jData;
 
@@ -68,12 +68,9 @@ struct MagneticMomentumAndEnergyInteraction
 
         auto rhoi = kxi * mi / xmassi;
         auto proi = pi / (kxi * mi * mi * gradhi);
-        auto voli = xmassi / kxi;
 
         T hiInv  = T(1) / hi;
         T hiInv3 = hiInv * hiInv * hiInv;
-
-        T eta_crit = std::cbrt(T(32) * M_PI / T(3) / T(nci));
 
         T norm2_B          = Bxi * Bxi + Byi * Byi + Bzi * Bzi;
         T v_alfven2i       = norm2_B / (mu_0 * rhoi);
@@ -91,10 +88,6 @@ struct MagneticMomentumAndEnergyInteraction
 
         T dist    = std::sqrt(r2);
         T distInv = (i == j) ? T(0) : T(1) / dist;
-
-        T ux_ij = rx * distInv;
-        T uy_ij = ry * distInv;
-        T uz_ij = rz * distInv;
 
         T vx_ij = vxi - vxj;
         T vy_ij = vyi - vyj;
@@ -119,7 +112,6 @@ struct MagneticMomentumAndEnergyInteraction
 
         auto rhoj = kxj * mj / xmassj;
         auto proj = pj / (kxj * mj * mj * gradhj);
-        auto volj = xmassj / kxj;
 
         T rv     = rx * vx_ij + ry * vy_ij + rz * vz_ij;
         T rv_slr = rv;
@@ -134,8 +126,9 @@ struct MagneticMomentumAndEnergyInteraction
             T f_i     = (denom_i > T(0)) ? std::abs(divvi) / denom_i : T(0); // per-particle Balsara modulators
             T f_j     = (denom_j > T(0)) ? std::abs(divvj) / denom_j : T(0);
             Lij       = stl::max(avFloor, T(0.5) * (f_i + f_j));
-            T balsi   = T(1) - f_i * f_i;
-            T balsj   = T(1) - f_j * f_j;
+            T balsi    = T(1) - f_i * f_i;
+            T balsj    = T(1) - f_j * f_j;
+            T eta_crit = std::cbrt(T(32) * M_PI / T(3) / T(nci));
             rv_slr += avRvCorrection({rx, ry, rz}, stl::min(v1, v2), eta_crit, balsi, balsj, gradV_i,
                                      {dvxdxj, dvxdyj + dvydxj, dvxdzj + dvzdxj, dvydyj, dvydzj + dvzdyj, dvzdzj});
         }
@@ -143,11 +136,10 @@ struct MagneticMomentumAndEnergyInteraction
         T v_alfven2j       = (Bxj * Bxj + Byj * Byj + Bzj * Bzj) / (rhoj * mu_0);
         T magneticVsignalj = std::sqrt(cj * cj + v_alfven2j);
 
-        T wij             = rv * distInv;
-        T wij_slr         = rv_slr * distInv;
-        T delta_u         = ui - uj;
-        T viscosity_ij = artificial_viscosity(alpha_i, alpha_j, magneticVsignali, magneticVsignalj, wij_slr, wij_slr, Lij);
-        T heat_conduction = AV_heat_conduction(T(alpha_u), wij_slr, rhoi, rhoj, proi, proj, delta_u);
+        T wij     = rv * distInv;
+        T wij_slr = rv_slr * distInv;
+        T viscosity_ij =
+            artificial_viscosity(alpha_i, alpha_j, magneticVsignali, magneticVsignalj, wij_slr, wij_slr, Lij);
 
         // For time-step calculations
         T vijsignal = (i == j) ? T(0) : T(0.5) * (magneticVsignali + magneticVsignalj) - T(2) * wij_slr;
@@ -177,13 +169,6 @@ struct MagneticMomentumAndEnergyInteraction
         T    a_visc_y      = T(0.5) * (a_visc * termA2_i + b_visc * termA2_j);
         T    a_visc_z      = T(0.5) * (a_visc * termA3_i + b_visc * termA3_j);
         T    a_visc_energy = a_visc_x * vx_ij + a_visc_y * vy_ij + a_visc_z * vz_ij;
-
-        T a_heat      = voli * mj / mi * heat_conduction;
-        T b_heat      = volj * heat_conduction;
-        T a_heat_x    = T(0.5) * (a_heat * termA1_i + b_heat * termA1_j);
-        T a_heat_y    = T(0.5) * (a_heat * termA2_i + b_heat * termA2_j);
-        T a_heat_z    = T(0.5) * (a_heat * termA3_i + b_heat * termA3_j);
-        T a_heat_cond = a_heat_x * ux_ij + a_heat_y * uy_ij + a_heat_z * uz_ij;
 
         T energy = mj * a_mom * (vx_ij * termA1_i + vy_ij * termA2_i + vz_ij * termA3_i);
 
@@ -225,7 +210,7 @@ struct MagneticMomentumAndEnergyInteraction
         momentum_y += mj * (a_mom * momentum_yi + b_mom * momentum_yj) - a_visc_y;
         momentum_z += mj * (a_mom * momentum_zi + b_mom * momentum_zj) - a_visc_z;
 
-        return std::make_tuple(a_visc_energy, a_heat_cond, energy, momentum_x, momentum_y, momentum_z, f_i,
+        return std::make_tuple(a_visc_energy, energy, momentum_x, momentum_y, momentum_z, f_i,
                                cstone::ijloop::symmetric::even(cstone::ijloop::reduction::max(vijsignal)));
     }
 };
@@ -238,16 +223,16 @@ struct MagneticMomentumAndEnergyPostamble
     template<class ParticleData, class Result>
     constexpr auto operator()(const ParticleData& iData, const Result& result) const
     {
-        const auto [i, iPos, hi, vxi, vyi, vzi, mi, ci, ui, kxi, alpha_i, xmassi, pi, gradhi, c11i, c12i, c13i, c22i,
+        const auto [i, iPos, hi, vxi, vyi, vzi, mi, ci, kxi, alpha_i, xmassi, pi, gradhi, c11i, c12i, c13i, c22i,
                     c23i, c33i, nci, Bxi, Byi, Bzi, dvxdxi, dvxdyi, dvxdzi, dvydxi, dvydyi, dvydzi, dvzdxi, dvzdyi,
                     dvzdzi, tdpdTrhoi, divvi, curlvi] = iData;
-        auto [a_visc_energy, a_heat_cond, energy, momentum_x, momentum_y, momentum_z, f_i, maxvsignal] = result;
+        auto [a_visc_energy, energy, momentum_x, momentum_y, momentum_z, f_i, maxvsignal] = result;
 
         T  mu_0Inv    = T(1) / mu_0;
         a_visc_energy = stl::max(T(0), a_visc_energy);
         T  proi       = pi / (kxi * mi * mi * gradhi);
         T  eCoeff     = UseTdpdTrho ? tdpdTrhoi : proi;
-        Tc dui = K * (eCoeff * energy + T(0.5) * a_visc_energy + a_heat_cond); // factor of 2 already removed from 2P/rho
+        Tc dui = K * (eCoeff * energy + T(0.5) * a_visc_energy); // factor of 2 already removed from 2P/rho
 
         // tensile instability correction factor, plasma beta dependent (Wissing et al.)
         T norm2_B = Bxi * Bxi + Byi * Byi + Bzi * Bzi;
@@ -283,7 +268,7 @@ struct MagneticMomentumAndEnergyPostambleWithDt : MagneticMomentumAndEnergyPosta
     {
         const auto [du, grad_P_x, grad_P_y, grad_P_z, maxvsignal] =
             MagneticMomentumAndEnergyPostamble<UseTdpdTrho, T, Tc>::operator()(iData, result);
-        const auto [i, iPos, hi, vxi, vyi, vzi, mi, ci, ui, kxi, alpha_i, xmassi, pi, gradhi, c11i, c12i, c13i, c22i,
+        const auto [i, iPos, hi, vxi, vyi, vzi, mi, ci, kxi, alpha_i, xmassi, pi, gradhi, c11i, c12i, c13i, c22i,
                     c23i, c33i, nci, Bxi, Byi, Bzi, dvxdxi, dvxdyi, dvxdzi, dvydxi, dvydyi, dvydzi, dvzdxi, dvzdyi,
                     dvzdzi, tdpdTrhoi, divvi, curlvi] = iData;
 
@@ -299,9 +284,9 @@ struct MagneticMomentumAndEnergyPostambleWithDt : MagneticMomentumAndEnergyPosta
 };
 
 template<bool SLR, class Neighborhood, class Tc, class T, class Tm, class Tm1>
-void magneticMomentumAndEnergyIjLoop(Neighborhood const& neighborhood, Tc K, Tc Kcour, Tc mu_0, Tc alpha_u, T Atmin,
-                                     T Atmax, T ramp, const T* vx, const T* vy, const T* vz, const Tm* m, const T* c,
-                                     const Tc* u, const T* kx, const T* alpha, const T* xm, const T* p, const T* gradh,
+void magneticMomentumAndEnergyIjLoop(Neighborhood const& neighborhood, Tc K, Tc Kcour, Tc mu_0, T Atmin, T Atmax,
+                                     T ramp, const T* vx, const T* vy, const T* vz, const Tm* m, const T* c,
+                                     const T* kx, const T* alpha, const T* xm, const T* p, const T* gradh,
                                      const T* c11, const T* c12, const T* c13, const T* c22, const T* c23, const T* c33,
                                      const unsigned* nc, const Tc* Bx, const Tc* By, const Tc* Bz, const T* dvxdx,
                                      const T* dvxdy, const T* dvxdz, const T* dvydx, const T* dvydy, const T* dvydz,
@@ -311,7 +296,7 @@ void magneticMomentumAndEnergyIjLoop(Neighborhood const& neighborhood, Tc K, Tc 
 {
     if constexpr (!SLR) { dvxdx = dvxdy = dvxdz = dvydx = dvydy = dvydz = dvzdx = dvzdy = dvzdz = vx; }
     const auto input =
-        std::make_tuple(vx, vy, vz, m, c, u, kx, alpha, xm, p, gradh, c11, c12, c13, c22, c23, c33, nc, Bx, By, Bz,
+        std::make_tuple(vx, vy, vz, m, c, kx, alpha, xm, p, gradh, c11, c12, c13, c22, c23, c33, nc, Bx, By, Bz,
                         dvxdx, dvxdy, dvxdz, dvydx, dvydy, dvydz, dvzdx, dvzdy, dvzdz,
                         tdpdTrho ? tdpdTrho : vx /* pass random derefable array if tdpdTrho is null */,
                         divv, curlv);
@@ -319,13 +304,13 @@ void magneticMomentumAndEnergyIjLoop(Neighborhood const& neighborhood, Tc K, Tc 
     if (tdpdTrho)
     {
         neighborhood.ijLoop(input, output,
-                            MagneticMomentumAndEnergyInteraction<SLR, T>{wh, T(mu_0), T(alpha_u), Atmin, Atmax, ramp, avFloor},
+                            MagneticMomentumAndEnergyInteraction<SLR, T>{wh, T(mu_0), Atmin, Atmax, ramp, avFloor},
                             MagneticMomentumAndEnergyPostambleWithDt<true, T, Tc>{K, mu_0, Kcour});
     }
     else
     {
         neighborhood.ijLoop(input, output,
-                            MagneticMomentumAndEnergyInteraction<SLR, T>{wh, T(mu_0), T(alpha_u), Atmin, Atmax, ramp, avFloor},
+                            MagneticMomentumAndEnergyInteraction<SLR, T>{wh, T(mu_0), Atmin, Atmax, ramp, avFloor},
                             MagneticMomentumAndEnergyPostambleWithDt<false, T, Tc>{K, mu_0, Kcour});
     }
 }

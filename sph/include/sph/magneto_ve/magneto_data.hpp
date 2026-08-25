@@ -45,7 +45,6 @@
 #include "cstone/util/reallocate.hpp"
 #include "sph/types.hpp"
 
-#include "resistivity.hpp"
 
 namespace sphexa::magneto
 {
@@ -72,18 +71,8 @@ public:
 
     // Parameters, should maybe move the induction/dissipation constants here
     RealType mu_0{1.0};
-    // HydroType alpha_B_max{1.0}; // not wired up yet
-    // HydroType alpha_B_min{0.0};
-
-    // Artificial resistivity scheme, selected via --resistivity. alpha_B_const is used when scheme == Constant.
-    sph::magneto::ResistivityScheme resistivityScheme{sph::magneto::ResistivityScheme::SLR};
-    RealType                        alpha_B_const{1.0};
-    // Floor F in the SLR resistivity Balsara-like amplitude clamp Lij = max(F, modulator), set via --arfloor.
-    // 1.0 disables the modulation.
-    HydroType arFloor{1.0};
-
-    // Artificial conductivity coefficient, set via --conductivity. 0 disables the AV heat conduction term.
-    RealType alpha_u{0.0};
+    //! @brief artificial resistivity amplitude, set via --resistivity. Unused when SLR is active.
+    RealType alpha_B_const{1.0};
 
     // Observables
     RealType eMag{0.0}, meanDivBError{0.0}, maxDivBError{0.0};
@@ -115,9 +104,6 @@ public:
     FieldVector<HydroType> curlB_x, curlB_y, curlB_z;
     FieldVector<HydroType> gradB_norm; // 2-norm of the gradient matrix
 
-    // Artificial resistivity
-    FieldVector<HydroType> alpha_B;
-
     // Magnetic field Jacobian J_B (full 9 components, used by SLR resistivity)
     FieldVector<HydroType> dBxdx, dBxdy, dBxdz;
     FieldVector<HydroType> dBydx, dBydy, dBydz;
@@ -145,7 +131,7 @@ public:
         "Bx",     "By",       "Bz",          "dBx",   "dBy",     "dBz",     "dBx_m1", "dBy_m1", "dBz_m1",
         "psi_ch", "d_psi_ch", "d_psi_ch_m1", "dvxdx", "dvxdy",   " dvxdz",  "dvydx",  "dvydy",  "dvydz",
         "dvzdx",  "dvzdy",    "dvzdz",       "divB",  "divB_conj", "curlB_x", "curlB_y", "curlB_z",
-        "gradB_norm", "alpha_B", "dBxdx",     "dBxdy", "dBxdz",   "dBydx",   "dBydy",  "dBydz",  "dBzdx",
+        "gradB_norm", "dBxdx",   "dBxdy",     "dBxdz", "dBydx",   "dBydy",   "dBydz",  "dBzdx",
         "dBzdy",  "dBzdz",    "dB_diss_x",   "dB_diss_y", "dB_diss_z", "du_diss"};
 
     static const inline std::string prefix{"magneto::"};
@@ -158,7 +144,7 @@ public:
     {
         auto ret = std::tie(Bx, By, Bz, dBx, dBy, dBz, dBx_m1, dBy_m1, dBz_m1, psi_ch, d_psi_ch, d_psi_ch_m1, dvxdx,
                             dvxdy, dvxdz, dvydx, dvydy, dvydz, dvzdx, dvzdy, dvzdz, divB, divB_conj, curlB_x, curlB_y,
-                            curlB_z, gradB_norm, alpha_B, dBxdx, dBxdy, dBxdz, dBydx, dBydy, dBydz, dBzdx, dBzdy, dBzdz,
+                            curlB_z, gradB_norm, dBxdx, dBxdy, dBxdz, dBydx, dBydy, dBydz, dBzdx, dBzdy, dBzdz,
                             dB_diss_x, dB_diss_y, dB_diss_z, du_diss);
 
 #if defined(__clang__) || __GNUC__ > 11

@@ -42,10 +42,10 @@ namespace sphexa::magneto
 
 using namespace sph;
 
-template<bool SLR, class DomainType, class DataType>
-class MagnetoTurbProp final : public MagnetoHydroProp<SLR, DomainType, DataType>
+template<bool SLR, bool MhdSLR, class DomainType, class DataType>
+class MagnetoTurbProp final : public MagnetoHydroProp<SLR, MhdSLR, DomainType, DataType>
 {
-    using Base = MagnetoHydroProp<SLR, DomainType, DataType>;
+    using Base = MagnetoHydroProp<SLR, MhdSLR, DomainType, DataType>;
     using Base::rank_;
     using Base::timer;
 

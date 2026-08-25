@@ -35,8 +35,6 @@
 #include "sph/kernels.hpp"
 #include "sph/table_lookup.hpp"
 
-#include "resistivity.hpp"
-
 namespace sph::magneto
 {
 
@@ -82,19 +80,14 @@ struct DivBCurlBInteraction
     }
 };
 
-template<class T, class Tc>
+template<bool SLR, class T, class Tc>
 struct DivBCurlBPostamble
 {
-    Tc                K;
-    ResistivityScheme scheme;
-    Tc                alpha_B_const;
+    Tc K;
 
     template<class ParticleData, class Result>
     constexpr auto operator()(const ParticleData& iData, const Result& result) const
     {
-        constexpr T alpha_B_max = T(1.0); // temporary bounds for AR switch
-        constexpr T alpha_B_min = T(0.05);
-
         const auto [i, iPos, hi, Bxi, Byi, Bzi, kxi, xmassi, c11i, c12i, c13i, c22i, c23i, c33i, gradhi] = iData;
         auto [dBxx, dBxy, dBxz, dByx, dByy, dByz, dBzx, dBzy, dBzz, divBcons]                            = result;
 
@@ -113,52 +106,45 @@ struct DivBCurlBPostamble
         T gradB_norm = norm_kxi * std::sqrt(dBxx * dBxx + dBxy * dBxy + dBxz * dBxz + dByx * dByx + dByy * dByy +
                                             dByz * dByz + dBzx * dBzx + dBzy * dBzy + dBzz * dBzz);
 
-        T dBxdx = norm_kxi * dBxx;
-        T dBxdy = norm_kxi * dBxy;
-        T dBxdz = norm_kxi * dBxz;
-        T dBydx = norm_kxi * dByx;
-        T dBydy = norm_kxi * dByy;
-        T dBydz = norm_kxi * dByz;
-        T dBzdx = norm_kxi * dBzx;
-        T dBzdy = norm_kxi * dBzy;
-        T dBzdz = norm_kxi * dBzz;
+        T divB = norm_kxi * (dBxx + dByy + dBzz);
 
-        T divB = dBxdx + dBydy + dBzdz;
-
-        T alpha_B;
-        if (scheme == ResistivityScheme::Constant) { alpha_B = alpha_B_const; }
-        else if (scheme == ResistivityScheme::SLR || scheme == ResistivityScheme::SLRB ||
-                 scheme == ResistivityScheme::SLRB2)
+        if constexpr (SLR)
         {
-            alpha_B = T(1);
+            T dBxdx = norm_kxi * dBxx;
+            T dBxdy = norm_kxi * dBxy;
+            T dBxdz = norm_kxi * dBxz;
+            T dBydx = norm_kxi * dByx;
+            T dBydy = norm_kxi * dByy;
+            T dBydz = norm_kxi * dByz;
+            T dBzdx = norm_kxi * dBzx;
+            T dBzdy = norm_kxi * dBzy;
+            T dBzdz = norm_kxi * dBzz;
+            return std::make_tuple(divB, divB_conj, curlB_x, curlB_y, curlB_z, gradB_norm, dBxdx, dBxdy, dBxdz,
+                                   dBydx, dBydy, dBydz, dBzdx, dBzdy, dBzdz);
         }
-        else
-        {
-            // Switch (Tricco & Price 2013, eq. 16)
-            T B_norm   = std::sqrt(Bxi * Bxi + Byi * Byi + Bzi * Bzi);
-            T alpha_Bi = (B_norm > 0) ? hi * gradB_norm / B_norm : alpha_B_max;
-            if (alpha_Bi > alpha_B_max) alpha_Bi = alpha_B_max;
-            if (alpha_Bi < alpha_B_min) alpha_Bi = alpha_B_min;
-            alpha_B = alpha_Bi;
-        }
-
-        return std::make_tuple(divB, divB_conj, curlB_x, curlB_y, curlB_z, gradB_norm, alpha_B, dBxdx, dBxdy, dBxdz,
-                               dBydx, dBydy, dBydz, dBzdx, dBzdy, dBzdz);
+        else { return std::make_tuple(divB, divB_conj, curlB_x, curlB_y, curlB_z, gradB_norm); }
     }
 };
 
-template<class Neighborhood, class Tc, class T>
+template<bool SLR, class Neighborhood, class Tc, class T>
 void divBCurlBIjLoop(Neighborhood const& neighborhood, Tc K, const Tc* Bx, const Tc* By, const Tc* Bz, const T* kx,
                      const T* xm, const T* c11, const T* c12, const T* c13, const T* c22, const T* c23, const T* c33,
                      const T* gradh, const T* wh, T* divB, T* divB_conj, T* curlB_x, T* curlB_y, T* curlB_z,
-                     T* gradB_norm, T* alpha_B, T* dBxdx, T* dBxdy, T* dBxdz, T* dBydx, T* dBydy, T* dBydz, T* dBzdx,
-                     T* dBzdy, T* dBzdz, ResistivityScheme scheme, Tc alpha_B_const)
+                     T* gradB_norm, T* dBxdx, T* dBxdy, T* dBxdz, T* dBydx, T* dBydy, T* dBydz, T* dBzdx, T* dBzdy,
+                     T* dBzdz)
 {
-    const auto input  = std::make_tuple(Bx, By, Bz, kx, xm, c11, c12, c13, c22, c23, c33, gradh);
-    const auto output = std::make_tuple(divB, divB_conj, curlB_x, curlB_y, curlB_z, gradB_norm, alpha_B, dBxdx, dBxdy,
-                                        dBxdz, dBydx, dBydy, dBydz, dBzdx, dBzdy, dBzdz);
-    neighborhood.ijLoop(input, output, DivBCurlBInteraction<T>{wh},
-                        DivBCurlBPostamble<T, Tc>{K, scheme, alpha_B_const});
+    const auto input = std::make_tuple(Bx, By, Bz, kx, xm, c11, c12, c13, c22, c23, c33, gradh);
+    if constexpr (SLR)
+    {
+        const auto output = std::make_tuple(divB, divB_conj, curlB_x, curlB_y, curlB_z, gradB_norm, dBxdx, dBxdy,
+                                            dBxdz, dBydx, dBydy, dBydz, dBzdx, dBzdy, dBzdz);
+        neighborhood.ijLoop(input, output, DivBCurlBInteraction<T>{wh}, DivBCurlBPostamble<true, T, Tc>{K});
+    }
+    else
+    {
+        const auto output = std::make_tuple(divB, divB_conj, curlB_x, curlB_y, curlB_z, gradB_norm);
+        neighborhood.ijLoop(input, output, DivBCurlBInteraction<T>{wh}, DivBCurlBPostamble<false, T, Tc>{K});
+    }
 }
 
 } // namespace sph::magneto

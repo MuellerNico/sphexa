@@ -30,6 +30,8 @@
 #pragma once
 
 #include <cmath>
+#include <tuple>
+#include <utility>
 
 #include "cstone/cuda/annotation.hpp"
 #include "cstone/primitives/math.hpp"
@@ -38,6 +40,39 @@
 
 namespace sph::magneto
 {
+
+namespace detail
+{
+template<class Tuple, std::size_t... Is>
+inline constexpr auto tupleSelect(const Tuple& t, std::index_sequence<Is...>)
+{
+    return std::make_tuple(std::get<Is>(t)...);
+}
+
+template<std::size_t Offset, class Tuple, std::size_t... Is>
+inline constexpr auto tupleSelectFrom(const Tuple& t, std::index_sequence<Is...>)
+{
+    return std::make_tuple(std::get<Offset + Is>(t)...);
+}
+} // namespace detail
+
+/*! @brief first @p N elements of @p t, used to destructure the scheme-independent part of an ijLoop particle tuple
+ *
+ * The ijLoop input tuple is shared between the interaction and the postamble, so a compile-time optional field
+ * block can only be appended at the end. These two helpers give each consumer the slice it needs.
+ */
+template<std::size_t N, class Tuple>
+inline constexpr auto tupleHead(const Tuple& t)
+{
+    return detail::tupleSelect(t, std::make_index_sequence<N>{});
+}
+
+//! @brief elements [Offset, tuple_size) of @p t
+template<std::size_t Offset, class Tuple>
+inline constexpr auto tupleTail(const Tuple& t)
+{
+    return detail::tupleSelectFrom<Offset>(t, std::make_index_sequence<std::tuple_size_v<Tuple> - Offset>{});
+}
 
 //! @brief 3x3 matrix-vector product where the matrix is given as its three rows; result type follows @p vec
 template<class Tv, class Tm>
@@ -58,16 +93,14 @@ HOST_DEVICE_FUN inline cstone::Vec3<Tv> matvec3(const cstone::Vec3<Tm>& row_x, c
  * @param R           relative position vector (x_a - x_b)
  * @param eta_ab      min(|R|/h_a, |R|/h_b)  (q_ab in the paper, Eq. 15)
  * @param eta_crit    cbrt(32π / (3 n_b))    (q_crit, Eq. 16)
- * @param balsi       Balsara-like factor (1-B_a^p) for particle a (use 1 to disable)
- * @param balsj       Balsara-like factor (1-B_b^p) for particle b
  * @param gradBx_a    ∇Bx at particle a (∂Bx/∂x, ∂Bx/∂y, ∂Bx/∂z); same for By, Bz and particle b
  * @return            additive correction Δ such that B_ab_SLR = B_ab + Δ
  */
 template<class Tc, class T>
 HOST_DEVICE_FUN inline cstone::Vec3<Tc>
-mhdSLRCorrection(cstone::Vec3<Tc> R, Tc eta_ab, T eta_crit, T balsi, T balsj, cstone::Vec3<T> gradBx_a,
-                 cstone::Vec3<T> gradBy_a, cstone::Vec3<T> gradBz_a, cstone::Vec3<T> gradBx_b,
-                 cstone::Vec3<T> gradBy_b, cstone::Vec3<T> gradBz_b)
+mhdSLRCorrection(cstone::Vec3<Tc> R, Tc eta_ab, T eta_crit, cstone::Vec3<T> gradBx_a, cstone::Vec3<T> gradBy_a,
+                 cstone::Vec3<T> gradBz_a, cstone::Vec3<T> gradBx_b, cstone::Vec3<T> gradBy_b,
+                 cstone::Vec3<T> gradBz_b)
 {
     constexpr T q_fold_inv = 5.0f; // 1/q_fold with q_fold = 0.2 (Frontiere et al. 2017)
     
@@ -94,7 +127,7 @@ mhdSLRCorrection(cstone::Vec3<Tc> R, Tc eta_ab, T eta_crit, T balsi, T balsj, cs
     T vanLeer = (limiter < T(0)) ? T(0) : (limiter > T(1) ? T(1) : limiter);
     T phi_ab  = T(0.5) * kappa_ab * vanLeer;
 
-    return Tc(-phi_ab) * (Tc(balsi) * JBR_a + Tc(balsj) * JBR_b);
+    return Tc(-phi_ab) * (JBR_a + JBR_b);
 }
 
 } // namespace sph::magneto

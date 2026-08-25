@@ -49,8 +49,8 @@ void computeMomentumEnergy(const GroupView& grp, float* groupDt, SimData& sim, c
     else
     {
         magneticMomentumAndEnergyIjLoop<SLR>(
-            d.neighborhood, d.K, d.Kcour, md.mu_0, md.alpha_u, d.Atmin, d.Atmax, d.ramp, d.vx.data(), d.vy.data(),
-            d.vz.data(), d.m.data(), d.c.data(), d.u.data(), d.kx.data(), d.alpha.data(), d.xm.data(), d.p.data(),
+            d.neighborhood, d.K, d.Kcour, md.mu_0, d.Atmin, d.Atmax, d.ramp, d.vx.data(), d.vy.data(),
+            d.vz.data(), d.m.data(), d.c.data(), d.kx.data(), d.alpha.data(), d.xm.data(), d.p.data(),
             d.gradh.data(), d.c11.data(), d.c12.data(), d.c13.data(), d.c22.data(), d.c23.data(), d.c33.data(),
             d.nc.data(), md.Bx.data(), md.By.data(), md.Bz.data(), md.dvxdx.data(), md.dvxdy.data(), md.dvxdz.data(),
             md.dvydx.data(), md.dvydy.data(), md.dvydz.data(), md.dvzdx.data(), md.dvzdy.data(), md.dvzdz.data(),

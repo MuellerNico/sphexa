@@ -39,15 +39,14 @@
 namespace sph::magneto::cuda
 {
 
-template<class HydroData, class MagnetoData>
+template<bool SLR, class HydroData, class MagnetoData>
 void computeInductionAndDissipationGpu(const GroupView& grp, HydroData& d, MagnetoData& m,
                                        const cstone::Box<typename HydroData::RealType>&)
 {
-    inductionAndDissipationIjLoop(
-        d.neighborhood, d.K, m.mu_0, m.resistivityScheme, m.arFloor, rawPtr(d.vx), rawPtr(d.vy), rawPtr(d.vz),
-        rawPtr(d.c),
+    inductionAndDissipationIjLoop<SLR>(
+        d.neighborhood, d.K, m.mu_0, alphaB<SLR>(m), rawPtr(d.vx), rawPtr(d.vy), rawPtr(d.vz), rawPtr(d.c),
         rawPtr(m.Bx), rawPtr(m.By), rawPtr(m.Bz), rawPtr(d.m), rawPtr(d.xm), rawPtr(d.kx), rawPtr(d.gradh),
-        rawPtr(d.c11), rawPtr(d.c12), rawPtr(d.c13), rawPtr(d.c22), rawPtr(d.c23), rawPtr(d.c33), rawPtr(m.alpha_B),
+        rawPtr(d.c11), rawPtr(d.c12), rawPtr(d.c13), rawPtr(d.c22), rawPtr(d.c23), rawPtr(d.c33),
         rawPtr(m.psi_ch), rawPtr(d.nc), rawPtr(m.dBxdx), rawPtr(m.dBxdy), rawPtr(m.dBxdz), rawPtr(m.dBydx),
         rawPtr(m.dBydy), rawPtr(m.dBydz), rawPtr(m.dBzdx), rawPtr(m.dBzdy), rawPtr(m.dBzdz), rawPtr(m.dvxdx),
         rawPtr(m.dvxdy), rawPtr(m.dvxdz), rawPtr(m.dvydx), rawPtr(m.dvydy), rawPtr(m.dvydz), rawPtr(m.dvzdx),
@@ -58,8 +57,13 @@ void computeInductionAndDissipationGpu(const GroupView& grp, HydroData& d, Magne
     checkGpuErrors(cudaDeviceSynchronize());
 }
 
-template void computeInductionAndDissipationGpu(const GroupView& grp, sphexa::ParticlesData<cstone::GpuTag>& d,
-                                                sphexa::magneto::MagnetoData<cstone::GpuTag>& m,
-                                                const cstone::Box<SphTypes::CoordinateType>&);
+#define INDUCTION_DISSIPATION(slr)                                                                                    \
+    template void computeInductionAndDissipationGpu<slr>(const GroupView& grp,                                        \
+                                                         sphexa::ParticlesData<cstone::GpuTag>& d,                    \
+                                                         sphexa::magneto::MagnetoData<cstone::GpuTag>& m,             \
+                                                         const cstone::Box<SphTypes::CoordinateType>&)
+
+INDUCTION_DISSIPATION(true);
+INDUCTION_DISSIPATION(false);
 
 } // namespace sph::magneto::cuda
