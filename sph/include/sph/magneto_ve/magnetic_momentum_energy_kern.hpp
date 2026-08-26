@@ -128,7 +128,7 @@ struct MagneticMomentumAndEnergyInteraction
             Lij       = stl::max(avFloor, T(0.5) * (f_i + f_j));
             T balsi    = T(1) - f_i * f_i;
             T balsj    = T(1) - f_j * f_j;
-            T eta_crit = std::cbrt(T(32) * M_PI / T(3) / T(nci));
+            T eta_crit = std::cbrt(T(32) * T(M_PI) / T(3) / T(nci));
             rv_slr += avRvCorrection({rx, ry, rz}, stl::min(v1, v2), eta_crit, balsi, balsj, gradV_i,
                                      {dvxdxj, dvxdyj + dvydxj, dvxdzj + dvzdxj, dvydyj, dvydzj + dvzdyj, dvzdzj});
         }
