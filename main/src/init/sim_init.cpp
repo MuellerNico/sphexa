@@ -191,6 +191,12 @@ std::unique_ptr<ISimInitializer<Dataset>> SimInitializers<Dataset>::makeTDEOrbit
 #endif
 
 template<class Dataset>
+std::unique_ptr<ISimInitializer<Dataset>> SimInitializers<Dataset>::makeSedovMagnetoGrid()
+{
+    return std::make_unique<SedovMagnetoGrid<Dataset>>();
+}
+
+template<class Dataset>
 std::unique_ptr<ISimInitializer<Dataset>>
 SimInitializers<Dataset>::makeSedovMagneto(std::string glassBlock, std::string settingsFile, IFileReader* reader)
 {

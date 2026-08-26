@@ -248,6 +248,36 @@ void initMagnetoFields(MagnetoData& md, HydroData& d, const std::map<std::string
 }
 
 template<class SimData>
+class SedovMagnetoGrid : public SedovGrid<SimData>
+{
+    mutable InitSettings settings_;
+
+public:
+    SedovMagnetoGrid()
+        : SedovGrid<SimData>()
+    {
+        SimData sim;
+        settings_ = buildSettings(sim, magneticSedovConstants(), {}, nullptr);
+    }
+
+    cstone::Box<typename SimData::RealType> initImpl(int rank, int numRanks, size_t cubeSide, SimData& simData,
+                                                     IFileReader* reader) const override
+    {
+        auto box = SedovGrid<SimData>::initImpl(rank, numRanks, cubeSide, simData, reader);
+        auto& md = simData.magneto;
+        md.resize(simData.hydro.x.size());
+        initMagnetoFields(md, simData.hydro, settings_);
+
+        settings_["numParticlesGlobal"] = double(simData.hydro.numParticlesGlobal);
+        BuiltinWriter attributeSetter(settings_);
+        simData.hydro.loadOrStoreAttributes(&attributeSetter);
+        return box;
+    }
+
+    [[nodiscard]] const InitSettings& constants() const override { return settings_; }
+};
+
+template<class SimData>
 class SedovMagneto : public SedovGlass<SimData>
 {
     std::string          glassBlock = SedovGlass<SimData>::glassBlock;

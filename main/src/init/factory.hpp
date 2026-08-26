@@ -113,8 +113,8 @@ std::unique_ptr<ISimInitializer<Dataset>> initializerFactory(std::string testCas
     }
     if (testNamedBase == "sedov-magneto")
     {
-        if (glassBlock.empty()) { throw std::runtime_error("need a valid glass block for sedov-magneto\n"); }
-        return SimInitializers<Dataset>::makeSedovMagneto(glassBlock, settingsFile, reader);
+        if (glassBlock.empty()) { return SimInitializers<Dataset>::makeSedovMagnetoGrid(); }
+        else { return SimInitializers<Dataset>::makeSedovMagneto(glassBlock, settingsFile, reader); }
     }
     if (testNamedBase == "kelvin-helmholtz-magneto")
     {
