@@ -30,21 +30,10 @@
 #pragma once
 
 #include "sph/sph_gpu.hpp"
-#include "sph/hydro_ve/iad_gradh_kern.hpp"
-#include "full_divv_curlv_kern.hpp"
-#include "divB_curlB_kern.hpp"
+#include "iad_divv_divB_kern.hpp"
 
 namespace sph::magneto
 {
-
-//! @brief IAD coefficients + grad-h, reusing the hydro per-pair functors
-template<class Neighborhood, class Tc, class Tm, class T>
-void iadGradhIjLoop(Neighborhood const& neighborhood, Tc K, const Tm* m, const T* xm, const T* kx, const unsigned* nc,
-                    const T* wh, const T* whd, T* c11, T* c12, T* c13, T* c22, T* c23, T* c33, T* gradh)
-{
-    neighborhood.ijLoop(std::make_tuple(m, xm, kx, nc), std::make_tuple(c11, c12, c13, c22, c23, c33, gradh),
-                        IADGradhInteraction<T>{wh, whd}, IADGradhPostamble<T, Tc>{K});
-}
 
 template<bool SLR, class Tc, class SimulationData>
 void computeIadFullDivvCurlv(const GroupView& grp, SimulationData& sim, const cstone::Box<Tc>& box)
@@ -60,22 +49,15 @@ void computeIadFullDivvCurlv(const GroupView& grp, SimulationData& sim, const cs
     {
         auto* curlv = (d.x.size() == d.curlv.size()) ? d.curlv.data() : nullptr;
 
-        iadGradhIjLoop(d.neighborhood, d.K, d.m.data(), d.xm.data(), d.kx.data(), d.nc.data(), d.wh.data(),
-                       d.whd.data(), d.c11.data(), d.c12.data(), d.c13.data(), d.c22.data(), d.c23.data(),
-                       d.c33.data(), d.gradh.data());
-
-        fullDivvCurlvIjLoop(d.neighborhood, d.K, d.vx.data(), d.vy.data(), d.vz.data(), d.kx.data(), d.xm.data(),
-                            d.c11.data(), d.c12.data(), d.c13.data(), d.c22.data(), d.c23.data(), d.c33.data(),
-                            d.gradh.data(), d.wh.data(), d.divv.data(), curlv, md.dvxdx.data(), md.dvxdy.data(),
-                            md.dvxdz.data(), md.dvydx.data(), md.dvydy.data(), md.dvydz.data(), md.dvzdx.data(),
-                            md.dvzdy.data(), md.dvzdz.data());
-
-        divBCurlBIjLoop<SLR>(d.neighborhood, d.K, md.Bx.data(), md.By.data(), md.Bz.data(), d.kx.data(), d.xm.data(),
-                        d.c11.data(), d.c12.data(), d.c13.data(), d.c22.data(), d.c23.data(), d.c33.data(),
-                        d.gradh.data(), d.wh.data(), md.divB.data(), md.divB_conj.data(), md.curlB_x.data(),
-                        md.curlB_y.data(), md.curlB_z.data(), md.gradB_norm.data(), md.dBxdx.data(),
-                        md.dBxdy.data(), md.dBxdz.data(), md.dBydx.data(), md.dBydy.data(), md.dBydz.data(),
-                        md.dBzdx.data(), md.dBzdy.data(), md.dBzdz.data());
+        iadDivvDivBIjLoop<SLR>(
+            d.neighborhood, d.K, d.vx.data(), d.vy.data(), d.vz.data(), md.Bx.data(), md.By.data(), md.Bz.data(),
+            d.m.data(), d.xm.data(), d.kx.data(), d.nc.data(), d.wh.data(), d.whd.data(), d.c11.data(), d.c12.data(),
+            d.c13.data(), d.c22.data(), d.c23.data(), d.c33.data(), d.gradh.data(), d.divv.data(), curlv,
+            md.dvxdx.data(), md.dvxdy.data(), md.dvxdz.data(), md.dvydx.data(), md.dvydy.data(), md.dvydz.data(),
+            md.dvzdx.data(), md.dvzdy.data(), md.dvzdz.data(), md.divB.data(), md.divB_conj.data(), md.curlB_x.data(),
+            md.curlB_y.data(), md.curlB_z.data(), md.gradB_norm.data(), md.dBxdx.data(), md.dBxdy.data(),
+            md.dBxdz.data(), md.dBydx.data(), md.dBydy.data(), md.dBydz.data(), md.dBzdx.data(), md.dBzdy.data(),
+            md.dBzdz.data());
     }
 }
 
