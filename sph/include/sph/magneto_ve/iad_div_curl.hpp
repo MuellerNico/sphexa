@@ -30,7 +30,8 @@
 #pragma once
 
 #include "sph/sph_gpu.hpp"
-#include "iad_divv_divB_kern.hpp"
+#include "iad_full_divv_curlv_kern.hpp"
+#include "divB_curlB_kern.hpp"
 
 namespace sph::magneto
 {
@@ -49,15 +50,18 @@ void computeIadFullDivvCurlv(const GroupView& grp, SimulationData& sim, const cs
     {
         auto* curlv = (d.x.size() == d.curlv.size()) ? d.curlv.data() : nullptr;
 
-        iadDivvDivBIjLoop<SLR>(
-            d.neighborhood, d.K, d.vx.data(), d.vy.data(), d.vz.data(), md.Bx.data(), md.By.data(), md.Bz.data(),
-            d.m.data(), d.xm.data(), d.kx.data(), d.nc.data(), d.wh.data(), d.whd.data(), d.c11.data(), d.c12.data(),
-            d.c13.data(), d.c22.data(), d.c23.data(), d.c33.data(), d.gradh.data(), d.divv.data(), curlv,
-            md.dvxdx.data(), md.dvxdy.data(), md.dvxdz.data(), md.dvydx.data(), md.dvydy.data(), md.dvydz.data(),
-            md.dvzdx.data(), md.dvzdy.data(), md.dvzdz.data(), md.divB.data(), md.divB_conj.data(), md.curlB_x.data(),
-            md.curlB_y.data(), md.curlB_z.data(), md.gradB_norm.data(), md.dBxdx.data(), md.dBxdy.data(),
-            md.dBxdz.data(), md.dBydx.data(), md.dBydy.data(), md.dBydz.data(), md.dBzdx.data(), md.dBzdy.data(),
-            md.dBzdz.data());
+        iadFullDivvCurlvIjLoop(d.neighborhood, d.K, d.vx.data(), d.vy.data(), d.vz.data(), d.m.data(), d.xm.data(),
+                               d.kx.data(), d.nc.data(), d.wh.data(), d.whd.data(), d.c11.data(), d.c12.data(),
+                               d.c13.data(), d.c22.data(), d.c23.data(), d.c33.data(), d.gradh.data(), d.divv.data(),
+                               curlv, md.dvxdx.data(), md.dvxdy.data(), md.dvxdz.data(), md.dvydx.data(),
+                               md.dvydy.data(), md.dvydz.data(), md.dvzdx.data(), md.dvzdy.data(), md.dvzdz.data());
+
+        divBCurlBIjLoop<SLR>(d.neighborhood, d.K, md.Bx.data(), md.By.data(), md.Bz.data(), d.kx.data(), d.xm.data(),
+                             d.c11.data(), d.c12.data(), d.c13.data(), d.c22.data(), d.c23.data(), d.c33.data(),
+                             d.gradh.data(), d.wh.data(), md.divB.data(), md.divB_conj.data(), md.curlB_x.data(),
+                             md.curlB_y.data(), md.curlB_z.data(), md.gradB_norm.data(), md.dBxdx.data(),
+                             md.dBxdy.data(), md.dBxdz.data(), md.dBydx.data(), md.dBydy.data(), md.dBydz.data(),
+                             md.dBzdx.data(), md.dBzdy.data(), md.dBzdz.data());
     }
 }
 

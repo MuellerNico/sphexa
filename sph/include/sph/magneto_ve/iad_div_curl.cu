@@ -47,14 +47,18 @@ void computeIadFullDivvCurlv(const GroupView& grp, HydroData& d, MagnetoData& m,
 {
     auto* curlv = (d.x.size() == d.curlv.size()) ? rawPtr(d.curlv) : nullptr;
 
-    iadDivvDivBIjLoop<SLR>(
-        d.neighborhood, d.K, rawPtr(d.vx), rawPtr(d.vy), rawPtr(d.vz), rawPtr(m.Bx), rawPtr(m.By), rawPtr(m.Bz),
-        rawPtr(d.m), rawPtr(d.xm), rawPtr(d.kx), rawPtr(d.nc), rawPtr(d.wh), rawPtr(d.whd), rawPtr(d.c11),
-        rawPtr(d.c12), rawPtr(d.c13), rawPtr(d.c22), rawPtr(d.c23), rawPtr(d.c33), rawPtr(d.gradh), rawPtr(d.divv),
-        curlv, rawPtr(m.dvxdx), rawPtr(m.dvxdy), rawPtr(m.dvxdz), rawPtr(m.dvydx), rawPtr(m.dvydy), rawPtr(m.dvydz),
-        rawPtr(m.dvzdx), rawPtr(m.dvzdy), rawPtr(m.dvzdz), rawPtr(m.divB), rawPtr(m.divB_conj), rawPtr(m.curlB_x),
-        rawPtr(m.curlB_y), rawPtr(m.curlB_z), rawPtr(m.gradB_norm), rawPtr(m.dBxdx), rawPtr(m.dBxdy), rawPtr(m.dBxdz),
-        rawPtr(m.dBydx), rawPtr(m.dBydy), rawPtr(m.dBydz), rawPtr(m.dBzdx), rawPtr(m.dBzdy), rawPtr(m.dBzdz));
+    iadFullDivvCurlvIjLoop(d.neighborhood, d.K, rawPtr(d.vx), rawPtr(d.vy), rawPtr(d.vz), rawPtr(d.m), rawPtr(d.xm),
+                           rawPtr(d.kx), rawPtr(d.nc), rawPtr(d.wh), rawPtr(d.whd), rawPtr(d.c11), rawPtr(d.c12),
+                           rawPtr(d.c13), rawPtr(d.c22), rawPtr(d.c23), rawPtr(d.c33), rawPtr(d.gradh),
+                           rawPtr(d.divv), curlv, rawPtr(m.dvxdx), rawPtr(m.dvxdy), rawPtr(m.dvxdz), rawPtr(m.dvydx),
+                           rawPtr(m.dvydy), rawPtr(m.dvydz), rawPtr(m.dvzdx), rawPtr(m.dvzdy), rawPtr(m.dvzdz));
+
+    divBCurlBIjLoop<SLR>(d.neighborhood, d.K, rawPtr(m.Bx), rawPtr(m.By), rawPtr(m.Bz), rawPtr(d.kx), rawPtr(d.xm),
+                         rawPtr(d.c11), rawPtr(d.c12), rawPtr(d.c13), rawPtr(d.c22), rawPtr(d.c23), rawPtr(d.c33),
+                         rawPtr(d.gradh), rawPtr(d.wh), rawPtr(m.divB), rawPtr(m.divB_conj), rawPtr(m.curlB_x),
+                         rawPtr(m.curlB_y), rawPtr(m.curlB_z), rawPtr(m.gradB_norm), rawPtr(m.dBxdx), rawPtr(m.dBxdy),
+                         rawPtr(m.dBxdz), rawPtr(m.dBydx), rawPtr(m.dBydy), rawPtr(m.dBydz), rawPtr(m.dBzdx),
+                         rawPtr(m.dBzdy), rawPtr(m.dBzdz));
 
     checkGpuErrors(cudaDeviceSynchronize());
 }
