@@ -26,7 +26,8 @@ import functools
 from multiprocessing import Pool
 
 from _h5_common import (print_metadata, get_nsteps, resolve_field,
-                        resolution_label, CLEAN_FONT, apply_clean_style)
+                        resolution_label, read_domain, CLEAN_FONT,
+                        apply_clean_style)
 
 
 # M4 cubic-spline SPH kernel shape in 3D (q = r/h). The 1/h**3 factor is left
@@ -45,9 +46,8 @@ def cubic_spline_3d(q):
 # uses the full 3D kernel attenuated by its offset from the plane (not a thin
 # slab), normalized as sum(v*w)/sum(w) so a constant field is reproduced
 # exactly. Returns (xi, yi, field) with xi/yi the cell edges.
-def sph_scatter_to_grid(xs, ys, zoff, hs, values, resolution):
-    xmin, xmax = xs.min(), xs.max()
-    ymin, ymax = ys.min(), ys.max()
+def sph_scatter_to_grid(xs, ys, zoff, hs, values, resolution, bounds):
+    xmin, xmax, ymin, ymax = bounds
     dx = (xmax - xmin) / resolution
     dy = (ymax - ymin) / resolution
 
@@ -113,7 +113,7 @@ def _vector_stem(name):
 # samples in the slab (xs, ys, values). No plotting here.
 def compute_slice_grids(fname, step, field, resolution,
                         slice_axis, slice_pos, scatter=False,
-                        fieldlines=None):
+                        fieldlines=None, smooth=1.0):
     print(f"Reading step {step} from {fname}...")
     ha, va = _PLOT_AXES[slice_axis]
     with h5py.File(fname, "r") as f:
@@ -141,50 +141,60 @@ def compute_slice_grids(fname, step, field, resolution,
             v_vals, _ = resolve_field(s, vf)
             stream = (u_vals, v_vals, _vector_stem(uf))
 
+        dom = read_domain(s)
+        if slice_pos is None:
+            slice_pos = float(dom.centre[dom.index(slice_axis)])
         if "h" in s:
             h = np.array(s["h"])
         else:
-            x, y, z = coords['x'], coords['y'], coords['z']
             n_particles = len(coords['x'])
-            vol = (x.max() - x.min()) * (y.max() - y.min()) * (z.max() - z.min())
-            h_est = 1.2 * (vol / n_particles) ** (1.0 / 3.0)
+            h_est = 1.2 * (float(np.prod(dom.length)) / n_particles) ** (1.0 / 3.0)
             h = np.full(n_particles, h_est)
             print(f"  h not in file, using estimate h={h_est:.6f}")
 
+    # Wider render kernel: same interpolation, more neighbours per pixel.
+    if smooth != 1.0:
+        h = h * smooth
+        print(f"  Render smoothing: h x {smooth:g}")
+
     n_particles = len(coords['x'])
-    extents = [coords[ax].max() - coords[ax].min() for ax in ('x', 'y', 'z')]
-    res_label = resolution_label(extents, n_particles)
+    res_label = resolution_label(dom.length, n_particles)
     print(f"Step {step}: time={time_val:.8f}, N={n_particles} ({res_label})")
-    for ax, vals in coords.items():
-        print(f"  {ax}: [{vals.min():.4f}, {vals.max():.4f}]")
+    print(f"  box: {dom.describe()}, slicing at {slice_axis}={slice_pos:+.6f}")
     print(f"  {field}: [{np.nanmin(values):.6f}, {np.nanmax(values):.6f}]")
 
-    mask = np.abs(coords[slice_axis] - slice_pos) < 2.0 * h
+    # periodic wrap on the slice axis: a cut on the boundary of a [0, L] box
+    # keeps the full kernel support instead of half of it
+    off  = dom.offset(coords[slice_axis] - slice_pos, slice_axis)
+    mask = np.abs(off) < 2.0 * h
     print(f"  Particles in slice: {mask.sum()} / {n_particles} "
           f"({mask.sum() / n_particles * 100:.2f}%)")
 
+    i_ha, i_va = dom.index(ha), dom.index(va)
+    bounds = (dom.lo[i_ha], dom.hi[i_ha], dom.lo[i_va], dom.hi[i_va])
     xs   = coords[ha][mask]
     ys   = coords[va][mask]
-    zoff = coords[slice_axis][mask] - slice_pos
+    zoff = off[mask]
     hs   = h[mask]
 
     if scatter:
         return {'step': step, 'time': time_val, 'res_label': res_label,
                 'field': field, 'label': label, 'mode': 'scatter',
+                'slice_pos': slice_pos, 'bounds': bounds,
                 'xs': xs, 'ys': ys, 'values': values[mask],
                 'fieldlines': fieldlines is not None}
 
     print(f"  Interpolating onto {resolution}x{resolution} grid...")
-    xi, yi, di = sph_scatter_to_grid(xs, ys, zoff, hs, values[mask], resolution)
+    xi, yi, di = sph_scatter_to_grid(xs, ys, zoff, hs, values[mask], resolution, bounds)
 
     out = {'step': step, 'time': time_val, 'res_label': res_label,
            'field': field, 'label': label, 'mode': 'grid',
-           'xi': xi, 'yi': yi, 'values': di}
+           'slice_pos': slice_pos, 'bounds': bounds, 'xi': xi, 'yi': yi, 'values': di}
 
     if stream is not None:
         u_vals, v_vals, stem = stream
-        _, _, ug = sph_scatter_to_grid(xs, ys, zoff, hs, u_vals[mask], resolution)
-        _, _, vg = sph_scatter_to_grid(xs, ys, zoff, hs, v_vals[mask], resolution)
+        _, _, ug = sph_scatter_to_grid(xs, ys, zoff, hs, u_vals[mask], resolution, bounds)
+        _, _, vg = sph_scatter_to_grid(xs, ys, zoff, hs, v_vals[mask], resolution, bounds)
         out.update(stream_u=ug, stream_v=vg, stream_stem=stem)
 
     return out
@@ -251,13 +261,14 @@ def _format_cbar(cbar, label, log):
 
 
 # Plot a precomputed slice (grid or scatter) and return the figure.
-def render_slice(grids, slice_axis, slice_pos, title,
+def render_slice(grids, slice_axis, title,
                  vmin, vmax, cmap, log=False, point_size=1.0,
                  n_contours=0, contour_color='black',
                  fieldline_color='black', fieldline_density=1.0,
                  fieldline_broken=False, xlim=None, ylim=None, clean=False):
     ha, va = _PLOT_AXES[slice_axis]
     time_val = grids['time']
+    slice_pos = grids['slice_pos']
     header = title if title is not None else grids['label']
 
     fig, ax = plt.subplots(figsize=(8, 7))
@@ -285,12 +296,7 @@ def _auto_layout(n):
 # Panel height/width in data units, so the figure can be sized to the data and
 # the tiled panels pack without gaps.
 def _panel_aspect(g, xlim, ylim):
-    if g.get('mode') == 'scatter':
-        x0, x1, y0, y1 = (g['xs'].min(), g['xs'].max(),
-                          g['ys'].min(), g['ys'].max())
-    else:
-        x0, x1 = g['xi'][0, 0], g['xi'][0, -1]
-        y0, y1 = g['yi'][0, 0], g['yi'][-1, 0]
+    x0, x1, y0, y1 = g['bounds']
     if xlim is not None:
         x0, x1 = xlim
     if ylim is not None:
@@ -308,7 +314,7 @@ def _corner_label(ax, text, color, right=True):
 # color scale and served by a single colorbar. Panels fill row-major and are
 # tagged with labels (one per panel, or one per column) top right and, with
 # label_time, their time top left.
-def render_panels(grids, slice_axis, slice_pos, title, labels, layout,
+def render_panels(grids, slice_axis, title, labels, layout,
                   label_color, label_time, vmin, vmax, cmap, log=False, point_size=1.0,
                   n_contours=0, contour_color='black',
                   fieldline_color='black', fieldline_density=1.0,
@@ -362,8 +368,22 @@ def render_panels(grids, slice_axis, slice_pos, title, labels, layout,
     _format_cbar(fig.colorbar(im, cax=axes.cbar_axes[0]), grids[0]['label'], log)
     if not clean:
         header = title if title is not None else grids[0]['label']
-        fig.suptitle(f"{header}  ({slice_axis}={slice_pos:+.4f})", y=0.99, va='top')
+        fig.suptitle(f"{header}  ({_pos_label(grids, slice_axis)})", y=0.99, va='top')
     return fig
+
+
+# Panels of one figure can sit at different planes (each file's own box
+# midplane), so name the plane only when they agree.
+def _pos_label(grids, slice_axis):
+    pos = {g['slice_pos'] for g in grids}
+    return (f"{slice_axis}={pos.pop():+.4f}" if len(pos) == 1
+            else f"{slice_axis}=box midplane")
+
+
+def _pos_tag(grids, slice_axis):
+    pos = {g['slice_pos'] for g in grids}
+    return (f"{slice_axis}{pos.pop():+.4f}" if len(pos) == 1
+            else f"{slice_axis}mid")
 
 
 # Common colormap limits across all grids; explicit vmin/vmax always win. With
@@ -385,12 +405,13 @@ def shared_ranges(grids, vmin, vmax, log=False):
     return vmin, vmax
 
 
-def _save_fig(fig, fname, step, field, slice_axis, slice_pos, scatter, clean, tag=''):
+def _save_fig(fig, fname, step, field, pos_tag, scatter, clean, tag='',
+              smooth=1.0):
     outdir = os.path.dirname(os.path.abspath(fname))
     short = field.split('::')[-1]
-    suffix = '_scatter' if scatter else ''
+    suffix = ('_scatter' if scatter else '') + ('' if smooth == 1.0 else f"_h{smooth:g}")
     ext = 'pdf' if clean else 'png'
-    outname = os.path.join(outdir, f"slice_{short}_step{step}_{slice_axis}{slice_pos:+.4f}{tag}{suffix}.{ext}")
+    outname = os.path.join(outdir, f"slice_{short}_step{step}_{pos_tag}{tag}{suffix}.{ext}")
     fig.savefig(outname, dpi=300 if clean else 150, bbox_inches='tight')
     plt.close(fig)
     print(f"Saved: {outname}")
@@ -402,13 +423,14 @@ def plot_slice(fname, step, field, resolution, slice_axis,
                log, scatter, point_size,
                n_contours, contour_color,
                fieldlines, fieldline_color, fieldline_density,
-               fieldline_broken, xlim, ylim, clean):
+               fieldline_broken, xlim, ylim, clean, smooth=1.0):
     g = compute_slice_grids(fname, step, field, resolution, slice_axis, slice_pos,
-                            scatter, fieldlines)
-    fig = render_slice(g, slice_axis, slice_pos, title, vmin, vmax, cmap, log, point_size,
+                            scatter, fieldlines, smooth)
+    fig = render_slice(g, slice_axis, title, vmin, vmax, cmap, log, point_size,
                        n_contours, contour_color, fieldline_color, fieldline_density,
                        fieldline_broken, xlim, ylim, clean)
-    _save_fig(fig, fname, step, field, slice_axis, slice_pos, scatter, clean)
+    _save_fig(fig, fname, step, field, _pos_tag([g], slice_axis), scatter, clean,
+              smooth=smooth)
 
 
 # Map func over items, fanning out across `jobs` worker processes (serial when
@@ -423,15 +445,16 @@ def _pmap(jobs, func, items):
 
 # Module-level (picklable) render+save of one precomputed grid, for the shared-
 # scale path where ranges are known only after every grid is computed.
-def _render_save(g, fname, field, slice_axis, slice_pos, title, vmin, vmax,
+def _render_save(g, fname, field, slice_axis, title, vmin, vmax,
                  cmap, log, point_size, n_contours, contour_color, scatter,
                  fieldline_color, fieldline_density, fieldline_broken, xlim, ylim,
-                 clean):
-    fig = render_slice(g, slice_axis, slice_pos, title, vmin, vmax, cmap, log,
+                 clean, smooth=1.0):
+    fig = render_slice(g, slice_axis, title, vmin, vmax, cmap, log,
                        point_size, n_contours, contour_color,
                        fieldline_color, fieldline_density, fieldline_broken,
                        xlim, ylim, clean)
-    _save_fig(fig, fname, g['step'], field, slice_axis, slice_pos, scatter, clean)
+    _save_fig(fig, fname, g['step'], field, _pos_tag([g], slice_axis), scatter, clean,
+              smooth=smooth)
 
 
 # One PNG per step. With shared_scale (default) a single colormap range spans
@@ -442,7 +465,8 @@ def plot_all_steps(fname, steps, field, resolution, slice_axis,
                    log, scatter, point_size,
                    n_contours, contour_color,
                    fieldlines, fieldline_color, fieldline_density,
-                   fieldline_broken, xlim, ylim, clean, shared_scale, jobs):
+                   fieldline_broken, xlim, ylim, clean, shared_scale, jobs,
+                   smooth=1.0):
     # No shared range needed: compute+render+save each step independently.
     if not shared_scale:
         worker = functools.partial(plot_slice, fname, field=field, resolution=resolution,
@@ -453,25 +477,25 @@ def plot_all_steps(fname, steps, field, resolution, slice_axis,
                                    fieldline_color=fieldline_color,
                                    fieldline_density=fieldline_density,
                                    fieldline_broken=fieldline_broken, xlim=xlim, ylim=ylim,
-                                   clean=clean)
+                                   clean=clean, smooth=smooth)
         _pmap(jobs, worker, steps)
         return
 
     # Shared range: compute every grid first, then render against common limits.
     compute = functools.partial(compute_slice_grids, fname, field=field, resolution=resolution,
                                 slice_axis=slice_axis, slice_pos=slice_pos, scatter=scatter,
-                                fieldlines=fieldlines)
+                                fieldlines=fieldlines, smooth=smooth)
     grids = _pmap(jobs, compute, steps)
     vmin, vmax = shared_ranges(grids, vmin, vmax, log)
     print(f"Shared {field} scale: [{vmin:.6f}, {vmax:.6f}]" + (" (log)" if log else ""))
     render = functools.partial(_render_save, fname=fname, field=field, slice_axis=slice_axis,
-                               slice_pos=slice_pos, title=title, vmin=vmin, vmax=vmax, cmap=cmap,
+                               title=title, vmin=vmin, vmax=vmax, cmap=cmap,
                                log=log, point_size=point_size, n_contours=n_contours,
                                contour_color=contour_color, scatter=scatter,
                                fieldline_color=fieldline_color,
                                fieldline_density=fieldline_density,
                                fieldline_broken=fieldline_broken, xlim=xlim, ylim=ylim,
-                               clean=clean)
+                               clean=clean, smooth=smooth)
     _pmap(jobs, render, grids)
 
 
@@ -514,10 +538,11 @@ def plot_panels(panel_sets, field, resolution, slice_axis,
                 n_contours, contour_color,
                 fieldlines, fieldline_color, fieldline_density,
                 fieldline_broken, xlim, ylim, clean,
-                labels, layout, label_color, label_time, shared_scale, jobs):
+                labels, layout, label_color, label_time, shared_scale, jobs,
+                smooth=1.0):
     compute = functools.partial(_compute_panel, field=field, resolution=resolution,
                                 slice_axis=slice_axis, slice_pos=slice_pos,
-                                scatter=scatter, fieldlines=fieldlines)
+                                scatter=scatter, fieldlines=fieldlines, smooth=smooth)
     grids = _pmap(jobs, compute, [item for ps in panel_sets for item in ps])
 
     figures, at = [], 0
@@ -532,12 +557,13 @@ def plot_panels(panel_sets, field, resolution, slice_axis,
     for panel in figures:
         lo, hi = ((vmin, vmax) if shared_scale
                   else shared_ranges(panel, vmin, vmax, log))
-        fig = render_panels(panel, slice_axis, slice_pos, title, labels, layout,
+        fig = render_panels(panel, slice_axis, title, labels, layout,
                             label_color, label_time, lo, hi, cmap, log, point_size,
                             n_contours, contour_color, fieldline_color,
                             fieldline_density, fieldline_broken, xlim, ylim, clean)
-        _save_fig(fig, panel_sets[0][0][0], panel[0]['step'], field, slice_axis,
-                  slice_pos, scatter, clean, tag='_panels')
+        _save_fig(fig, panel_sets[0][0][0], panel[0]['step'], field,
+                  _pos_tag(panel, slice_axis), scatter, clean, tag='_panels',
+                  smooth=smooth)
 
 
 if __name__ == "__main__":
@@ -551,6 +577,7 @@ if __name__ == "__main__":
             "  %(prog)s data.h5 5 --field Bmag             PNG of |B| at step 5\n"
             "  %(prog)s data.h5 --all --field magneto::alpha_B\n"
             "  %(prog)s data.h5 5 --axis x --pos 0.5\n"
+            "  %(prog)s data.h5 --smooth 2                 smoother render (wider kernel)\n"
             "  %(prog)s data.h5 --field rho --fieldlines          rho slice + B field lines\n"
             "  %(prog)s data.h5 --field rho --fieldlines vx,vy,vz  ... + velocity field lines\n"
             "  %(prog)s a.h5 b.h5 c.h5 d.h5 --labels 128 256 512 1024\n"
@@ -575,8 +602,9 @@ if __name__ == "__main__":
                         help="Field to plot (raw dataset name or derived; default: rho)")
     parser.add_argument("--axis", choices=["x", "y", "z"], default="z",
                         help="Axis normal to the slice plane (default: z)")
-    parser.add_argument("--pos", type=float, default=0.0,
-                        help="Position along the slice axis (default: 0.0)")
+    parser.add_argument("--pos", type=float, default=None,
+                        help="Position along the slice axis (default: each file's "
+                             "own box midplane, read from the 'box' attribute)")
     parser.add_argument("-r", "--resolution", type=int, default=256,
                         help="Interpolation grid resolution per side (default: 256)")
     parser.add_argument("--title", default=None,
@@ -618,6 +646,13 @@ if __name__ == "__main__":
                              "fields like rho, Bmag, vmag, Emag.")
     parser.add_argument("--scatter", action="store_true",
                         help="Skip SPH interpolation; render raw particle scatter (fast)")
+    parser.add_argument("--smooth", type=float, default=1.0, metavar="FACTOR",
+                        help="Scale every particle's h by FACTOR in the render kernel "
+                             "(default: 1.0 = the simulation's own h). >1 averages over "
+                             "more neighbours per pixel, giving the smooth look of "
+                             "published rendered slices at the cost of a blurrier "
+                             "contact discontinuity; try 1.5-3. Cost grows as FACTOR^2. "
+                             "In --scatter mode it only widens the slab.")
     parser.add_argument("--point-size", type=float, default=1.0,
                         help="Scatter marker size (only used with --scatter; default: 1.0)")
     parser.add_argument("--contours", type=int, default=0, metavar="N",
@@ -691,7 +726,8 @@ if __name__ == "__main__":
                   fieldlines=fieldlines, fieldline_color=args.fieldline_color,
                   fieldline_density=args.fieldline_density,
                   fieldline_broken=args.fieldline_broken,
-                  xlim=args.xlim, ylim=args.ylim, clean=args.clean)
+                  xlim=args.xlim, ylim=args.ylim, clean=args.clean,
+                  smooth=args.smooth)
 
     # a lone panel with --labels/--label-time still goes through the panel
     # renderer, so the annotations are available on single-panel figures too

@@ -59,7 +59,7 @@ def _slice_worker(args):
 
 
 def make_slice_gif(fname, start, end, field='rho', resolution=256,
-                   slice_axis='z', slice_pos=0.0, title=None,
+                   slice_axis='z', slice_pos=None, title=None,
                    vmin=None, vmax=None, cmap='bone_r',
                    n_workers=None, max_frames=100):
     if n_workers is None:
@@ -79,14 +79,15 @@ def make_slice_gif(fname, start, end, field='rho', resolution=256,
     print(f"Shared {field} scale: [{vmin:.6f}, {vmax:.6f}]")
 
     print("Rendering frames and assembling GIF...")
-    frames = [_fig_to_frame(plot_slice.render_slice(g, slice_axis, slice_pos,
-                                                    title, vmin, vmax, cmap))
+    frames = [_fig_to_frame(plot_slice.render_slice(g, slice_axis, title,
+                                                    vmin, vmax, cmap))
               for g in ordered]
 
     outdir = os.path.dirname(os.path.abspath(fname))
     short = field.split('::')[-1]
+    pos_tag = plot_slice._pos_tag(ordered, slice_axis)
     outname = os.path.join(outdir,
-                           f"slice_{short}_steps{start}-{end}_{slice_axis}{slice_pos:+.4f}.gif")
+                           f"slice_{short}_steps{start}-{end}_{pos_tag}.gif")
     _save_gif(frames, outname)
 
 
@@ -155,8 +156,8 @@ if __name__ == "__main__":
                     help='Field to plot (raw or derived; default: rho)')
     ps.add_argument('--axis', choices=['x', 'y', 'z'], default='z',
                     help='Axis normal to the slice plane (default: z)')
-    ps.add_argument('--pos', type=float, default=0.0,
-                    help='Position along the slice axis (default: 0.0)')
+    ps.add_argument('--pos', type=float, default=None,
+                    help='Position along the slice axis (default: the box midplane)')
     ps.add_argument('-r', '--resolution', type=int, default=256,
                     help='Interpolation grid resolution per side (default: 256)')
     ps.add_argument('--title', default=None,

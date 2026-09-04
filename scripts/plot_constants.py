@@ -38,7 +38,12 @@ def load(fname):
     if data.ndim == 1:
         data = data[np.newaxis, :]
     ncols = data.shape[1]
-    return {col: data[:, i] for i, col in enumerate(COLUMNS[:ncols])}
+    cols = COLUMNS[:ncols]
+    # a run without magnetic fields skips the 4 MHD columns, so its 10th column is
+    # the test-specific scalar (KH growth, Mach rms), not eMag
+    if ncols == 10:
+        cols = COLUMNS[:9] + ["extra"]
+    return {col: data[:, i] for i, col in enumerate(cols)}
 
 
 def plot_constants(fname, show=False, kind="turb"):
@@ -49,7 +54,9 @@ def plot_constants(fname, show=False, kind="turb"):
     extra_label = EXTRA_LABELS.get(kind, "extra (col 13)")
     has_extra = "extra" in d
     has_res = "resHeating" in d
-    n_panels = 6 + int(has_res) + int(has_extra)
+    has_mhd = "eMag" in d  # pure-hydro runs stop at angmom, no eMag / divB / resHeating
+    # base panels: energy, drift, momentum, minDt (+ magnetic energy + divB if MHD)
+    n_panels = 4 + 2 * int(has_mhd) + int(has_res) + int(has_extra)
 
     # cumulative magnetic energy removed by artificial resistivity
     cum = None
@@ -77,12 +84,14 @@ def plot_constants(fname, show=False, kind="turb"):
     ax.set_ylabel("Energy (log)")
     ax.set_yscale("log")
 
-    for key, label, ls in [
+    energy_series = [
         ("etot", "etot (total)",    "-"),
         ("ecin", "ecin (kinetic)",  "--"),
         ("eint", "eint (thermal)",  "-."),
-        ("eMag", "eMag (magnetic)", ":"),
-    ]:
+    ]
+    if has_mhd:
+        energy_series.append(("eMag", "eMag (magnetic)", ":"))
+    for key, label, ls in energy_series:
         vals = d[key]
         pos = vals > 0
         if pos.any():
@@ -119,47 +128,52 @@ def plot_constants(fname, show=False, kind="turb"):
     ax.legend(fontsize=8, loc="upper right")
     ax.grid(True, alpha=0.3)
 
-    # --- Panel 4: Magnetic energy ---
-    ax = ax_list[3]
-    ax.set_ylabel("eMag / eMag₀")
-    eMag = d["eMag"] / d["eMag"][0]
-    pos = eMag > 0
-    if pos.any():
-        ax.plot(it[pos], eMag[pos], color="tab:purple", linewidth=1.2, label="eMag")
-    # dissipation-only expectation. eMag above it = magnetic energy created by the
-    # ideal induction term acting on velocity noise; the gap is that source, integrated.
-    if has_res:
-        floor = 1.0 - cum / d["eMag"][0]
-        ax.plot(it, floor, color="tab:gray", linewidth=1.0, linestyle="--",
-                label="1 − ∫resistive / eMag₀")
-        ax.fill_between(it, floor, eMag, where=eMag > floor, color="tab:purple",
-                        alpha=0.12, linewidth=0, label="ideal-induction source")
-        ax.legend(fontsize=8, loc="lower left")
-    ax.grid(True, which="both", alpha=0.3)
+    next_panel = 3
 
-    # --- Panel 5: div(B) errors (log scale) ---
-    ax = ax_list[4]
-    ax.set_ylabel("div(B) error (log)")
-    ax.set_yscale("log")
-    ax.set_ylim(bottom=1e-6, top=1e2)
-    mean_b = d["meanDivBError"]
-    max_b  = d["maxDivBError"]
-    pos_mean = mean_b > 0
-    pos_max  = max_b  > 0
-    if pos_mean.any():
-        ax.plot(it[pos_mean], mean_b[pos_mean], label="mean div(B) error", linewidth=1.2)
-    if pos_max.any():
-        ax.plot(it[pos_max],  max_b[pos_max],  label="max div(B) error",  linewidth=1.2, linestyle="--")
-    ax.legend(fontsize=8, loc="upper left")
-    ax.grid(True, which="both", alpha=0.3)
+    # --- Panel: Magnetic energy (MHD only) ---
+    if has_mhd:
+        ax = ax_list[next_panel]
+        next_panel += 1
+        ax.set_ylabel("eMag / eMag₀")
+        eMag = d["eMag"] / d["eMag"][0]
+        pos = eMag > 0
+        if pos.any():
+            ax.plot(it[pos], eMag[pos], color="tab:purple", linewidth=1.2, label="eMag")
+        # dissipation-only expectation. eMag above it = magnetic energy created by the
+        # ideal induction term acting on velocity noise; the gap is that source, integrated.
+        if has_res:
+            floor = 1.0 - cum / d["eMag"][0]
+            ax.plot(it, floor, color="tab:gray", linewidth=1.0, linestyle="--",
+                    label="1 − ∫resistive / eMag₀")
+            ax.fill_between(it, floor, eMag, where=eMag > floor, color="tab:purple",
+                            alpha=0.12, linewidth=0, label="ideal-induction source")
+            ax.legend(fontsize=8, loc="lower left")
+        ax.grid(True, which="both", alpha=0.3)
 
-    # --- Panel 6: Minimum timestep ---
-    ax = ax_list[5]
+    # --- Panel: div(B) errors (log scale, MHD only) ---
+    if has_mhd:
+        ax = ax_list[next_panel]
+        next_panel += 1
+        ax.set_ylabel("div(B) error (log)")
+        ax.set_yscale("log")
+        ax.set_ylim(bottom=1e-6, top=1e2)
+        mean_b = d["meanDivBError"]
+        max_b  = d["maxDivBError"]
+        pos_mean = mean_b > 0
+        pos_max  = max_b  > 0
+        if pos_mean.any():
+            ax.plot(it[pos_mean], mean_b[pos_mean], label="mean div(B) error", linewidth=1.2)
+        if pos_max.any():
+            ax.plot(it[pos_max],  max_b[pos_max],  label="max div(B) error",  linewidth=1.2, linestyle="--")
+        ax.legend(fontsize=8, loc="upper left")
+        ax.grid(True, which="both", alpha=0.3)
+
+    # --- Panel: Minimum timestep ---
+    ax = ax_list[next_panel]
+    next_panel += 1
     ax.set_ylabel("minDt")
     ax.plot(it, d["minDt"], color="tab:green", linewidth=1.2)
     ax.grid(True, alpha=0.3)
-
-    next_panel = 6
 
     # --- Panel: resistive heating ---
     # Left axis: instantaneous total resistive heating rate dE_int/dt. 

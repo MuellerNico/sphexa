@@ -10,7 +10,7 @@ from pathlib import Path
 import h5py
 import numpy as np
 
-from _h5_common import resolution_label
+from _h5_common import read_domain, resolution_label
 
 
 def format_runtime(seconds: float) -> str:
@@ -54,7 +54,7 @@ def parse_start(info_log: Path):
 
 def collect_dump(h5file: Path):
     info = {"rows": [], "n_particles": None, "fields": [], "attrs": {},
-            "box": None}
+            "domain": None, "particle_range": None}
     with h5py.File(h5file, "r") as f:
         step_keys = sorted(
             (k for k in f.keys() if k.startswith("Step#")),
@@ -80,8 +80,11 @@ def collect_dump(h5file: Path):
 
             s0 = f[step_keys[0]]
             info["attrs"] = {k: s0.attrs[k] for k in sorted(s0.attrs.keys())}
-            if all(ax in s0 for ax in ("x", "y", "z")):
-                info["box"] = {
+            has_coords = all(ax in s0 for ax in ("x", "y", "z"))
+            if "box" in s0.attrs or has_coords:
+                info["domain"] = read_domain(s0)
+            if has_coords:
+                info["particle_range"] = {
                     ax: (float(np.min(s0[ax][...])), float(np.max(s0[ax][...])))
                     for ax in ("x", "y", "z")
                 }
@@ -151,15 +154,14 @@ def main():
     n_particles = info["n_particles"]
     final_time = rows[-1][2] if rows else None
 
-    extents = None
-    if info["box"] is not None:
-        extents = [hi - lo for lo, hi in (info["box"][ax] for ax in ("x", "y", "z"))]
+    dom = info["domain"]
+    extents = dom.length if dom is not None else None
 
     dump_size = dump.stat().st_size
     profile = dump.with_name("profile.h5")
     profile_size = profile.stat().st_size if profile.exists() else None
 
-    skip_attrs = {"iteration", "time"}
+    skip_attrs = {"iteration", "time", "box", "boundaryType"}
     extra_attrs = {k: v for k, v in info["attrs"].items() if k not in skip_attrs}
 
     with info_log.open("a") as f:
@@ -179,10 +181,18 @@ def main():
         if info["fields"]:
             f.write(f"fields: {', '.join(info['fields'])}\n")
 
-        if info["box"] is not None:
-            f.write("box (Step#0):\n")
-            for ax, (lo, hi) in info["box"].items():
-                f.write(f"  {ax}: [{lo:.6f}, {hi:.6f}]  (extent {hi - lo:.6f})\n")
+        if dom is not None:
+            origin = "box attribute" if dom.from_attrs else "particle range (no box attribute)"
+            f.write(f"box (Step#0, from the {origin}):\n")
+            for i, ax in enumerate(("x", "y", "z")):
+                periodic = ", periodic" if dom.periodic[i] else ""
+                f.write(f"  {ax}: [{dom.lo[i]:.6f}, {dom.hi[i]:.6f}]  "
+                        f"(extent {dom.length[i]:.6f}{periodic})\n")
+
+        if info["particle_range"] is not None:
+            f.write("particle range (Step#0):\n")
+            for ax, (lo, hi) in info["particle_range"].items():
+                f.write(f"  {ax}: [{lo:.6f}, {hi:.6f}]\n")
 
         if extra_attrs:
             f.write("attrs (Step#0):\n")

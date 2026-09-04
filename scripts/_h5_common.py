@@ -130,22 +130,75 @@ def _dB_diss_rel(s):
     return v
 
 
+# --- domain box ---
+
+_AXES = ('x', 'y', 'z')
+
+
+# Simulation box with per-axis periodicity.
+class Domain:
+    def __init__(self, lo, hi, periodic, from_attrs=True):
+        self.lo = np.asarray(lo, dtype=float)
+        self.hi = np.asarray(hi, dtype=float)
+        self.periodic = np.asarray(periodic, dtype=bool)
+        self.from_attrs = from_attrs
+
+    @property
+    def length(self):
+        return self.hi - self.lo
+
+    @property
+    def centre(self):
+        return 0.5 * (self.lo + self.hi)
+
+    @staticmethod
+    def index(ax):
+        return _AXES.index(ax) if isinstance(ax, str) else ax
+
+    # minimum image on a periodic axis, plain difference otherwise
+    def offset(self, delta, ax):
+        i = self.index(ax)
+        if not self.periodic[i]:
+            return delta
+        L = self.length[i]
+        return delta - L * np.round(delta / L)
+
+    def describe(self):
+        return "  ".join(
+            f"{ax}: [{lo:.4f}, {hi:.4f}]{'p' if per else ''}"
+            for ax, lo, hi, per in zip(_AXES, self.lo, self.hi, self.periodic))
+
+
+# The 'box'/'boundaryType' attributes are exact and written on every step. The
+# particle-range fallback (for dumps predating them) is short by one
+# interparticle spacing on a periodic axis, enough to misplace a wrap, so it
+# never claims periodicity.
+def read_domain(s):
+    box = s.attrs.get('box')
+    if box is None:
+        print("  warning: no 'box' attribute; using the particle range, no periodic wrap")
+        return Domain([float(np.min(s[ax])) for ax in _AXES],
+                      [float(np.max(s[ax])) for ax in _AXES],
+                      [False] * 3, from_attrs=False)
+    b = np.atleast_1d(box).astype(float)
+    btype = s.attrs.get('boundaryType')
+    periodic = ([int(v) == 1 for v in np.atleast_1d(btype)] if btype is not None
+                else [False] * 3)
+    return Domain(b[0::2], b[1::2], periodic)
+
+
 # --- MHD-loop (Gardiner-Stone) frame ---
 # The exact solution is B = A0 phi_hat inside r < R0 and 0 outside, translated at
 # constant velocity, so B_phi carries all the signal and B_perp is pure error.
 
-def _minimum_image(delta, length):
-    return delta - length * np.round(delta / length)
-
-
 # B^2-weighted centroid of the loop in the xy-plane. Circular mean, so a loop
 # straddling the periodic edge is not pulled toward the box centre.
 def loop_centre(s):
-    box = np.atleast_1d(s.attrs['box']).astype(float)
+    dom = read_domain(s)
     w = _Emag(s) * _arr(s, 'm') / _arr(s, 'rho')
     centre = []
-    for q, lo, hi in ((_arr(s, 'x'), box[0], box[1]), (_arr(s, 'y'), box[2], box[3])):
-        length = hi - lo
+    for i, q in enumerate((_arr(s, 'x'), _arr(s, 'y'))):
+        lo, length = dom.lo[i], dom.length[i]
         th = 2.0 * np.pi * (q - lo) / length
         ang = np.arctan2(np.sum(w * np.sin(th)), np.sum(w * np.cos(th))) % (2.0 * np.pi)
         centre.append(lo + ang * length / (2.0 * np.pi))
@@ -154,10 +207,10 @@ def loop_centre(s):
 
 # (r, phi_hat_x, phi_hat_y) per particle about the loop axis.
 def loop_frame(s):
-    box = np.atleast_1d(s.attrs['box']).astype(float)
+    dom = read_domain(s)
     cx, cy = loop_centre(s)
-    dx = _minimum_image(_arr(s, 'x') - cx, box[1] - box[0])
-    dy = _minimum_image(_arr(s, 'y') - cy, box[3] - box[2])
+    dx = dom.offset(_arr(s, 'x') - cx, 'x')
+    dy = dom.offset(_arr(s, 'y') - cy, 'y')
     r = np.hypot(dx, dy)
     rsafe = np.maximum(r, 1e-30)
     return r, -dy / rsafe, dx / rsafe

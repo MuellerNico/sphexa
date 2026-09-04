@@ -17,7 +17,7 @@ import sys
 import argparse
 
 from _h5_common import (print_metadata, get_nsteps, resolve_field,
-                        CLEAN_FONT, apply_clean_style, scheme_colors,
+                        read_domain, CLEAN_FONT, apply_clean_style, scheme_colors,
                         scheme_label, apply_sci_ticks, apply_log_ticks,
                         SCHEME_ORDER)
 from plot_slice import cubic_spline_3d
@@ -42,9 +42,14 @@ def read_line_data(fname, step, field, axis, pos, n_samples, scatter):
         s = f[key]
         if "h" not in s:
             sys.exit(f"Error: 'h' not in {fname}:{key}; line cuts need smoothing lengths")
+        dom = read_domain(s)
+        if pos is None:
+            pos = [float(dom.centre[dom.index(a)]) for a in (a1, a2)]
         xs = np.asarray(s[axis])
-        d1 = np.asarray(s[a1]) - pos[0]
-        d2 = np.asarray(s[a2]) - pos[1]
+        # periodic wrap: a line on the boundary of a [0, L] box keeps the full
+        # kernel support instead of half of it
+        d1 = dom.offset(np.asarray(s[a1]) - pos[0], a1)
+        d2 = dom.offset(np.asarray(s[a2]) - pos[1], a2)
         h = np.asarray(s["h"])
         values, label = resolve_field(s, field)
         time_val = s.attrs["time"][0]
@@ -59,11 +64,12 @@ def read_line_data(fname, step, field, axis, pos, n_samples, scatter):
                  f"{a1}={pos[0]}, {a2}={pos[1]} in {fname}")
     xs, perp2, h, values = xs[mask], perp2[mask], h[mask], values[mask]
 
-    si = np.linspace(xs.min(), xs.max(), n_samples)
+    ia = dom.index(axis)
+    si = np.linspace(dom.lo[ia], dom.hi[ia], n_samples)
     num = np.zeros(n_samples)
     den = np.zeros(n_samples)
     for i, x0 in enumerate(si):
-        r = np.sqrt((xs - x0)**2 + perp2)
+        r = np.sqrt(dom.offset(xs - x0, axis)**2 + perp2)
         w = cubic_spline_3d(r / h)
         den[i] = w.sum()
         num[i] = (w * values).sum()
@@ -71,7 +77,8 @@ def read_line_data(fname, step, field, axis, pos, n_samples, scatter):
     ok = den > 0
     line[ok] = num[ok] / den[ok]
 
-    out = {'time': time_val, 'label': label, 'si': si, 'line': line}
+    out = {'time': time_val, 'label': label, 'pos': tuple(pos),
+           'si': si, 'line': line}
     if scatter:
         # tighter slab than the interpolation mask so perpendicular structure
         # doesn't masquerade as noise in the raw samples
@@ -79,6 +86,17 @@ def read_line_data(fname, step, field, axis, pos, n_samples, scatter):
         out['sx'] = xs[near]
         out['sv'] = values[near]
     return out
+
+
+# Overlaid files can sit at different cut positions (each box's own midpoint),
+# so name the position only when they agree. Returns (title text, filename tag).
+def _pos_labels(runs, a1, a2):
+    pos = {r['pos'] for r in runs}
+    if len(pos) == 1:
+        p1, p2 = pos.pop()
+        return (f"{a1}={p1:+.4f}, {a2}={p2:+.4f}",
+                f"{a1}{p1:+.4f}_{a2}{p2:+.4f}")
+    return "box midpoint", f"{a1}{a2}mid"
 
 
 # Default legend label: last two path components, so identical dump names in
@@ -113,10 +131,10 @@ if __name__ == "__main__":
                         help="Field to plot (raw dataset name or derived; default: rho)")
     parser.add_argument("--axis", choices=["x", "y", "z"], default="x",
                         help="Axis the cut runs along (default: x)")
-    parser.add_argument("--pos", nargs=2, type=float, default=[0.0, 0.0],
+    parser.add_argument("--pos", nargs=2, type=float, default=None,
                         metavar=("P1", "P2"),
                         help="Cut position on the two perpendicular axes, in x<y<z "
-                             "order (default: 0 0)")
+                             "order (default: the box midpoint of each)")
     parser.add_argument("--labels", default=None,
                         help="Comma-separated legend labels, one per file (default: "
                              f"the scheme name for that position, "
@@ -163,6 +181,7 @@ if __name__ == "__main__":
     else:
         labels = None
 
+    a1, a2 = _PERP_AXES[args.axis]
     runs = [read_line_data(f, st, args.field, args.axis, args.pos,
                            args.samples, args.scatter)
             for f, st in zip(args.files, steps)]
@@ -181,7 +200,6 @@ if __name__ == "__main__":
                        alpha=0.3, linewidths=0, rasterized=True)
     if args.log:
         ax.set_yscale('log')
-    a1, a2 = _PERP_AXES[args.axis]
     ax.set_xlabel(args.axis)
     ax.set_ylabel(runs[0]['label'])
     apply_sci_ticks(ax)
@@ -189,9 +207,9 @@ if __name__ == "__main__":
     if not args.clean:
         header = args.title if args.title is not None else runs[0]['label']
         ax.set_title(f"{header} along {args.axis} "
-                     f"({a1}={args.pos[0]:+.4f}, {a2}={args.pos[1]:+.4f})")
+                     f"({_pos_labels(runs, a1, a2)[0]})")
     ax.grid(alpha=0.3)
-    ax.legend(fontsize=9)
+    ax.legend()
     plt.tight_layout()
 
     if args.output is not None:
@@ -201,6 +219,6 @@ if __name__ == "__main__":
         short = args.field.split('::')[-1]
         ext = 'pdf' if args.clean else 'png'
         outname = os.path.join(outdir, f"linecut_{short}_step{steps[0]}_{args.axis}"
-                                       f"_{a1}{args.pos[0]:+.4f}_{a2}{args.pos[1]:+.4f}.{ext}")
+                                       f"_{_pos_labels(runs, a1, a2)[1]}.{ext}")
     fig.savefig(outname, dpi=300 if args.clean else 150, bbox_inches='tight')
     print(f"Saved: {outname}")

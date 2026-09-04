@@ -37,7 +37,7 @@ import sys
 import argparse
 
 from _h5_common import (print_metadata, get_nsteps, resolve_field,
-                        resolution_label, CLEAN_FONT, apply_clean_style,
+                        resolution_label, read_domain, CLEAN_FONT, apply_clean_style,
                         scheme_colors, scheme_label, apply_sci_ticks, SCHEME_ORDER)
 import briowu_reference
 
@@ -175,6 +175,7 @@ def compute_tube_fields(fname, step, y0=None, z0=None, thickness=None,
             sys.exit(1)
         s = f[key]
 
+        dom = read_domain(s)
         x = np.array(s['x'])
         y = np.array(s['y'])
         z = np.array(s['z'])
@@ -200,18 +201,19 @@ def compute_tube_fields(fname, step, y0=None, z0=None, thickness=None,
 
     n_particles = len(x)
     if y0 is None:
-        y0 = 0.5 * (y.min() + y.max())
+        y0 = float(dom.centre[1])
     if z0 is None:
-        z0 = 0.5 * (z.min() + z.max())
+        z0 = float(dom.centre[2])
     if thickness is None:
         thickness = 2.0 * float(np.median(h))
 
-    mask = (np.abs(y - y0) < thickness) & (np.abs(z - z0) < thickness)
+    # periodic wrap, so a tube on the boundary of a [0, L] box is not half empty
+    mask = ((np.abs(dom.offset(y - y0, 'y')) < thickness) &
+            (np.abs(dom.offset(z - z0, 'z')) < thickness))
     if xlim is not None:
         mask &= (x >= xlim[0]) & (x <= xlim[1])
     n_in = int(mask.sum())
-    extents = [x.max() - x.min(), y.max() - y.min(), z.max() - z.min()]
-    res_label = resolution_label(extents, n_particles)
+    res_label = resolution_label(dom.length, n_particles)
 
     print(f"Step {step}: time={time_val:.8f}, N={n_particles} ({res_label})")
     print(f"  tube center: (y={y0:.4f}, z={z0:.4f}), half-width: {thickness:.4f}")
@@ -279,9 +281,10 @@ def render_shocktube(grids, title="Brio-Wu", limits=None, xlim=None,
             # stack downwards from the top of the block so the reading order
             # matches the legend, which lists handles in plotting order
             ax.text(0.02, 0.02 + 0.06 * (len(gs) - 1 - li), txt, transform=ax.transAxes,
-                    fontsize=7, color=c, ha='left', va='bottom')
+                    fontsize=matplotlib.rcParams['legend.fontsize'],
+                    color=c, ha='left', va='bottom')
         if i == 0 and (ref is not None or len(gs) > 1):
-            ax.legend(loc='best', fontsize=9, framealpha=0.9, markerscale=3)
+            ax.legend(loc='best', framealpha=0.9, markerscale=3)
         if limits and name in limits:
             ax.set_ylim(limits[name])
         if xlim is not None:
@@ -347,7 +350,7 @@ def render_zoom(grids, zoom, fields, title="Brio-Wu", ms=2.5, clean=False):
         ax.set_ylabel(g0['labels'].get(name, name))
         apply_sci_ticks(ax)
         if i == 0:
-            ax.legend(loc='best', fontsize=9, framealpha=0.9, markerscale=3)
+            ax.legend(loc='best', framealpha=0.9, markerscale=3)
 
     for j in range(n, len(flat)):
         flat[j].axis('off')
@@ -412,9 +415,10 @@ def render_residual(grids, ref, title="Brio-Wu", xlim=None, ms=1.0, clean=False)
             # stack downwards from the top of the block so the reading order
             # matches the legend, which lists handles in plotting order
             ax.text(0.02, 0.02 + 0.06 * (len(gs) - 1 - li), txt, transform=ax.transAxes,
-                    fontsize=7, color=c, ha='left', va='bottom')
+                    fontsize=matplotlib.rcParams['legend.fontsize'],
+                    color=c, ha='left', va='bottom')
         if i == 0 and len(gs) > 1:
-            ax.legend(loc='best', fontsize=9, framealpha=0.9, markerscale=3)
+            ax.legend(loc='best', framealpha=0.9, markerscale=3)
         if xlim is not None:
             ax.set_xlim(xlim)
 

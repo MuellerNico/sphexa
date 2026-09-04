@@ -11,7 +11,7 @@ import sys
 import argparse
 
 from _h5_common import (print_metadata, get_nsteps, resolution_label,
-                        CLEAN_FONT, apply_clean_style, scheme_colors,
+                        read_domain, CLEAN_FONT, apply_clean_style, scheme_colors,
                         scheme_color,scheme_label, apply_sci_ticks, 
                         apply_log_ticks, SCHEME_ORDER)
 
@@ -160,13 +160,13 @@ def analyze(fnames, labels=None, fit_tmin=2.0, v_alfven=None, clean=False,
 
     figures = (
         ('amp',   True,  r'$A/A_0$',          lambda r: r['A'] / AMPLITUDE, 0),
-        ('noise', True,  r'$P_n$',            lambda r: r['Pn'],            1),
+        ('noise', True,  r'$\delta B_n$',            lambda r: r['Pn'],            1),
         ('phase', False, 'phase error [rad]', lambda r: r['phase_err'],     None),
     )
     colors = scheme_colors(len(runs))
     ext = 'pdf' if clean else 'png'
     for suffix, logy, ylabel, get, rate_idx in figures:
-        fig, ax = plt.subplots(figsize=(7, 5))
+        fig, ax = plt.subplots(figsize=(6, 6))
         for (r, lbl), rr, c in zip(zip(runs, labels), rates, colors):
             lab = lbl if rate_idx is None or clean or not np.isfinite(rr[rate_idx]) \
                 else f"{lbl} (rate {rr[rate_idx]:+.2e}/t)"
@@ -177,7 +177,7 @@ def analyze(fnames, labels=None, fit_tmin=2.0, v_alfven=None, clean=False,
         ax.set_ylabel(ylabel)
         apply_sci_ticks(ax)
         apply_log_ticks(ax)
-        ax.legend(fontsize=8)
+        ax.legend()
         plt.tight_layout()
         outname = os.path.join(outdir, f"alfven_analysis_{suffix}.{ext}")
         fig.savefig(outname, dpi=300 if clean else 150, bbox_inches='tight')
@@ -248,7 +248,7 @@ def convergence(fnames, step=None, v_alfven=None, clean=False):
     ax.set_xticklabels([f"{v:.0f}" for v in nx])
     ax.xaxis.set_minor_locator(NullLocator())
     apply_log_ticks(ax)
-    ax.legend(fontsize=9)
+    ax.legend()
     plt.tight_layout()
 
     outdir = os.path.dirname(os.path.abspath(fnames[0]))
@@ -269,9 +269,7 @@ def render_alfven_wave(fname, step, v_alfven=None, clean=False):
     x1, B2, _ = compute_x1_b2(h5step)
     time_val = h5step.attrs["time"][0]
     n_particles = len(x1)
-    extents = [np.asarray(h5step[ax]).max() - np.asarray(h5step[ax]).min()
-               for ax in ('x', 'y', 'z')]
-    res_label = resolution_label(extents, n_particles)
+    res_label = resolution_label(read_domain(h5step).length, n_particles)
 
     print(f"Step {step}: time={time_val:.8f}, N={n_particles} ({res_label})")
     print(f"  x1: [{x1.min():.4f}, {x1.max():.4f}]")
