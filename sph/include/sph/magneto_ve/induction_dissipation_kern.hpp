@@ -49,6 +49,7 @@ static constexpr float sigma_c = 1.0;
  * interaction and the postamble can each destructure the slice they need, independent of the scheme.
  */
 static constexpr std::size_t numInteractionInputs = 21; //!< i, pos, h + vx .. psi_ch
+static constexpr std::size_t numPostambleInputs   = 32; //!< the above + dvxdx .. dvzdz, divB_conj, du
 
 template<bool SLR, class T>
 struct InductionAndDissipationInteraction
@@ -107,9 +108,9 @@ struct InductionAndDissipationInteraction
         if constexpr (SLR)
         {
             const auto [nci, dBxdxi, dBxdyi, dBxdzi, dBydxi, dBydyi, dBydzi, dBzdxi, dBzdyi, dBzdzi] =
-                tupleTail<numInteractionInputs>(iData);
+                tupleTail<numPostambleInputs>(iData);
             const auto [ncj, dBxdxj, dBxdyj, dBxdzj, dBydxj, dBydyj, dBydzj, dBzdxj, dBzdyj, dBzdzj] =
-                tupleTail<numInteractionInputs>(jData);
+                tupleTail<numPostambleInputs>(jData);
 
             T  eta_crit_i = std::cbrt(T(32) * T(M_PI) / T(3) / T(nci));
             Tc eta_ab     = (v1 < v2) ? v1 : v2; // spacing in units of h
@@ -153,59 +154,58 @@ struct InductionAndDissipationPostamble
     constexpr auto operator()(const ParticleData& iData, const Result& result) const
     {
         const auto [i, iPos, hi, vxi, vyi, vzi, ci, Bxi, Byi, Bzi, mi, xmassi, kxi, gradhi, c11i, c12i, c13i, c22i,
-                    c23i, c33i, psi_ch_i] = tupleHead<numInteractionInputs>(iData);
+                    c23i, c33i, psi_ch_i, dvxdxi, dvxdyi, dvxdzi, dvydxi, dvydyi, dvydzi, dvzdxi, dvzdyi,
+                    dvzdzi, divB_conj_i, dui] = tupleHead<numPostambleInputs>(iData);
         auto [dB_diss_x, dB_diss_y, dB_diss_z, divB_clean_x, divB_clean_y, divB_clean_z, du_diss] = result;
 
-        T  rhoi        = kxi * mi / xmassi;
-        Tc du_diss_out = -T(0.5) * K / (rhoi * mu_0) * du_diss;
+        // Ideal induction equation
+        Tc dBxi = -Bxi * (dvydyi + dvzdzi) + Byi * dvxdyi + Bzi * dvxdzi;
+        Tc dByi = -Byi * (dvxdxi + dvzdzi) + Bxi * dvydxi + Bzi * dvydzi;
+        Tc dBzi = -Bzi * (dvxdxi + dvydyi) + Bxi * dvzdxi + Byi * dvzdyi;
 
-        // the ideal induction, psi and du terms are per-particle and are applied by inductionPerParticle
-        return std::make_tuple(Tc(K * (dB_diss_x - divB_clean_x)), Tc(K * (dB_diss_y - divB_clean_y)),
-                               Tc(K * (dB_diss_z - divB_clean_z)), du_diss_out, Tc(K * dB_diss_x), Tc(K * dB_diss_y),
-                               Tc(K * dB_diss_z));
+        dBxi += K * (dB_diss_x - divB_clean_x);
+        dByi += K * (dB_diss_y - divB_clean_y);
+        dBzi += K * (dB_diss_z - divB_clean_z);
+
+        T  rhoi   = kxi * mi / xmassi;
+        Tc du_out = dui - T(0.5) * K / (rhoi * mu_0) * du_diss;
+
+        // psi time differential (Wissing et al. 2020)
+        T v_alfven2 = (Bxi * Bxi + Byi * Byi + Bzi * Bzi) / (mu_0 * rhoi);
+        T ch        = fclean * std::sqrt(ci * ci + v_alfven2);
+        T tau_Inv   = (sigma_c * ch) / hi;
+        T d_psi_ch_out = -ch * divB_conj_i - psi_ch_i * (tau_Inv + (dvxdxi + dvydyi + dvzdzi) / T(2));
+
+        // Diagnostic outputs: resistive dB/dt and resistive heating
+        Tc dB_diss_out_x = K * dB_diss_x;
+        Tc dB_diss_out_y = K * dB_diss_y;
+        Tc dB_diss_out_z = K * dB_diss_z;
+        Tc du_diss_out   = -T(0.5) * K / (rhoi * mu_0) * du_diss;
+
+        return std::make_tuple(dBxi, dByi, dBzi, du_out, d_psi_ch_out, dB_diss_out_x, dB_diss_out_y, dB_diss_out_z,
+                               du_diss_out);
     }
 };
 
-/*! @brief the induction-equation terms that need no neighbor sum
- *
- * Kept out of the ijLoop because the framework loads the whole input tuple for every neighbor: carrying the
- * velocity Jacobian, divB_conj and du there costs 11 fields per pair to serve reads at i only.
- *
- * @param dB   in: the dissipative and cleaning contribution from the ijLoop; out: the full dB/dt
- */
-template<class Tc, class T>
-HOST_DEVICE_FUN inline void inductionPerParticle(cstone::Vec3<Tc>& dB, T& d_psi_ch, Tc Bxi, Tc Byi, Tc Bzi, T dvxdxi,
-                                                 T dvxdyi, T dvxdzi, T dvydxi, T dvydyi, T dvydzi, T dvzdxi, T dvzdyi,
-                                                 T dvzdzi, T ci, T hi, T rhoi, T psi_ch_i, T divB_conj_i, T mu_0)
-{
-    dB[0] += -Bxi * (dvydyi + dvzdzi) + Byi * dvxdyi + Bzi * dvxdzi;
-    dB[1] += -Byi * (dvxdxi + dvzdzi) + Bxi * dvydxi + Bzi * dvydzi;
-    dB[2] += -Bzi * (dvxdxi + dvydyi) + Bxi * dvzdxi + Byi * dvzdyi;
-
-    // psi time differential (Wissing et al. 2020)
-    T v_alfven2 = (Bxi * Bxi + Byi * Byi + Bzi * Bzi) / (mu_0 * rhoi);
-    T ch        = fclean * std::sqrt(ci * ci + v_alfven2);
-    T tau_Inv   = (sigma_c * ch) / hi;
-    d_psi_ch    = -ch * divB_conj_i - psi_ch_i * (tau_Inv + (dvxdxi + dvydyi + dvzdzi) / T(2));
-}
-
 template<bool SLR, class Neighborhood, class Tc, class T, class Tm>
-void inductionAndDissipationIjLoop(Neighborhood const& neighborhood, Tc K, Tc mu_0, Tc alpha_B, const T* vx,
-                                   const T* vy, const T* vz, const T* c, const Tc* Bx, const Tc* By, const Tc* Bz,
-                                   const Tm* m, const T* xm, const T* kx, const T* gradh, const T* c11, const T* c12,
-                                   const T* c13, const T* c22, const T* c23, const T* c33, const T* psi_ch,
-                                   const unsigned* nc, const T* dBxdx, const T* dBxdy, const T* dBxdz, const T* dBydx,
-                                   const T* dBydy, const T* dBydz, const T* dBzdx, const T* dBzdy, const T* dBzdz,
-                                   const T* wh, Tc* dBx_dt, Tc* dBy_dt, Tc* dBz_dt, Tc* dB_diss_x, Tc* dB_diss_y,
-                                   Tc* dB_diss_z, Tc* du_diss)
+void inductionAndDissipationIjLoop(
+    Neighborhood const& neighborhood, Tc K, Tc mu_0, Tc alpha_B, const T* vx, const T* vy, const T* vz, const T* c,
+    const Tc* Bx, const Tc* By, const Tc* Bz, const Tm* m, const T* xm, const T* kx, const T* gradh, const T* c11,
+    const T* c12, const T* c13, const T* c22, const T* c23, const T* c33, const T* psi_ch, const unsigned* nc,
+    const T* dBxdx, const T* dBxdy, const T* dBxdz, const T* dBydx, const T* dBydy, const T* dBydz, const T* dBzdx,
+    const T* dBzdy, const T* dBzdz, const T* dvxdx, const T* dvxdy, const T* dvxdz, const T* dvydx, const T* dvydy,
+    const T* dvydz, const T* dvzdx, const T* dvzdy, const T* dvzdz, const T* divB_conj, const T* wh, Tc* dBx_dt,
+    Tc* dBy_dt, Tc* dBz_dt, Tc* du, T* d_psi_ch, Tc* dB_diss_x, Tc* dB_diss_y, Tc* dB_diss_z, Tc* du_diss)
 {
-    const auto commonInput = std::make_tuple(vx, vy, vz, c, Bx, By, Bz, m, xm, kx, gradh, c11, c12, c13, c22, c23,
-                                             c33, psi_ch);
-    const auto output = std::make_tuple(dBx_dt, dBy_dt, dBz_dt, du_diss, dB_diss_x, dB_diss_y, dB_diss_z);
+    // the postamble slice must cover everything up to and including du, the SLR-only block is appended after it
+    const auto commonInput =
+        std::make_tuple(vx, vy, vz, c, Bx, By, Bz, m, xm, kx, gradh, c11, c12, c13, c22, c23, c33, psi_ch, dvxdx,
+                        dvxdy, dvxdz, dvydx, dvydy, dvydz, dvzdx, dvzdy, dvzdz, divB_conj, du);
+    const auto output = std::make_tuple(dBx_dt, dBy_dt, dBz_dt, du, d_psi_ch, dB_diss_x, dB_diss_y, dB_diss_z, du_diss);
 
     // +3 for the index, position and h that loadParticleData prepends. A mismatch here would silently shift
-    // every name in the structured bindings.
-    static_assert(std::tuple_size_v<decltype(commonInput)> + 3 == numInteractionInputs);
+    // every name in the postamble's structured binding.
+    static_assert(std::tuple_size_v<decltype(commonInput)> + 3 == numPostambleInputs);
 
     if constexpr (SLR)
     {
