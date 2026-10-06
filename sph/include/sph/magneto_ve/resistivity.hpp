@@ -25,7 +25,7 @@
 /*! @file
  * @brief artificial resistivity scheme selector for MHD dissipation
  *
- * @author Nicolas Müller
+ * @author Nicolas Mueller
  */
 
 #pragma once

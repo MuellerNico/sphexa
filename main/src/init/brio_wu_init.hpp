@@ -23,7 +23,7 @@
  */
 
 /*! @file Initialization of the Brio-Wu MHD shock tube test
- *  @author Nicolas Müller 
+ *  @author Nicolas Mueller 
  */
 
 #pragma once

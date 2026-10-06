@@ -24,7 +24,7 @@
 
 /*! @file Propagator to be used with Magneto-Hydrodynamics
  *
- * @author Helena Schmidt, Nicolas Müller
+ * @author Helena Schmidt, Nicolas Mueller
  */
 
 #pragma once

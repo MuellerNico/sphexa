@@ -24,7 +24,7 @@
 
 /*! @file slope-limited reconstruction of the magnetic field for artificial resistivity
  *
- * @author Nicolas Müller
+ * @author Nicolas Mueller
  */
 
 #pragma once

@@ -24,7 +24,7 @@
 
 /*! @file calculates dB/dt with the induction equation, as well as dissipation and correction terms
  *
- * @author Helena Schmidt, Nicolas Müller
+ * @author Helena Schmidt, Nicolas Mueller
  */
 
 #pragma once
