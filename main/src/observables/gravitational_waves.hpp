@@ -25,7 +25,7 @@
 
 /*! @file output time, energies and the gravitational radiation as well as the quadrupole moment
  *
- *  @author Lukas Schmidt
+ *  @author Helena Schmidt
  */
 
 #include <array>

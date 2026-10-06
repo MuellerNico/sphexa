@@ -26,7 +26,7 @@
 /*! @file
  * @brief to add
  *
- * @author Lukas Schmidt
+ * @author Helena Schmidt
  */
 
 #pragma once

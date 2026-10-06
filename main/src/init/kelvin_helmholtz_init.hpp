@@ -26,7 +26,7 @@
 /*! @file
  * @brief Kelvin Helmholtz simulation data initialization
  *
- * @author Lukas Schmidt
+ * @author Helena Schmidt
  */
 
 #pragma once

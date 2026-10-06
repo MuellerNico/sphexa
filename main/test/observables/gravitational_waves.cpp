@@ -25,7 +25,7 @@
 
 /*!@brief small test for gravitational waves observable
  *
- * @author Lukas Schmidt
+ * @author Helena Schmidt
  */
 
 #include "gtest/gtest.h"

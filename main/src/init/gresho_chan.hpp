@@ -26,7 +26,7 @@
 /*! @file
  * @brief Gresho-Chan vortex simulation data initialization
  *
- * @author Lukas Schmidt
+ * @author Helena Schmidt
  */
 
 #include "cstone/primitives/primitives_acc.hpp"

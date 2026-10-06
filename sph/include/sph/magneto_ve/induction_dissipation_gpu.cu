@@ -24,7 +24,7 @@
 
 /*! @file calculates dB/dt with the induction equation, as well as dissipation and correction terms
  *
- * @author Lukas Schmidt
+ * @author Helena Schmidt
  */
 
 #include "cstone/cuda/cuda_utils.cuh"

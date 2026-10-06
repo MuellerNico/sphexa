@@ -218,10 +218,11 @@ and a warp-aware tree-traversal inspired by the
 * Sebastian Keller (lead dev)
 * Noah Kubli
 * Lucio Mayer (PI)
+* Nicolas Mueller
 * Jg Piccinali
 * Tom Quinn
 * Darren Reed
-* Lukas Schmidt
+* Helena Schmidt
 * Osman Seckin Simsek
 * Felix Thaler
 * Yiqing Zhu

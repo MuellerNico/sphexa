@@ -26,7 +26,7 @@
 /*! @file
  * @brief reductions for different observables on the GPU
  *
- * @author Lukas Schmidt
+ * @author Helena Schmidt
  */
 
 #include <thrust/execution_policy.h>

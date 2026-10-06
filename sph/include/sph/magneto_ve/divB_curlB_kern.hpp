@@ -24,7 +24,7 @@
 /*! @file spatial derivatives of the magnetic field
  *
  * @author Ruben Cabezon <ruben.cabezon@unibas.ch>
- * @author Lukas Schmidt
+ * @author Helena Schmidt
  */
 
 #pragma once

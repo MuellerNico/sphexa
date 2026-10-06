@@ -25,7 +25,7 @@
 /*! @file
  * @brief Contains the object holding all particle data required for Magneto-Hydrodynamics
  *
- * @author Lukas Schmidt
+ * @author Helena Schmidt
  *
  */
 

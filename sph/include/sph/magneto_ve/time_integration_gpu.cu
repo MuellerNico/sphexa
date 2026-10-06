@@ -25,7 +25,7 @@
 /*! @file integrate quantities related to magneto-hydrodynamics
  *
  * uses Adams-Bashforth 2nd order integration
- * @author Lukas Schmidt
+ * @author Helena Schmidt
  */
 
 #include "magneto_data.hpp"

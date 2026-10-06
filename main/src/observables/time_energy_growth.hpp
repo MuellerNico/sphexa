@@ -27,7 +27,7 @@
  * @brief output and calculate energies and growth rate for Kelvin-Helmholtz tests
  *        This calculation for the growth rate was taken from McNally et al. ApJSS, 201 (2012)
  *
- * @author Lukas Schmidt
+ * @author Helena Schmidt
  */
 
 #include <array>

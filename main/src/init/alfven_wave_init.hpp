@@ -24,7 +24,7 @@
 
 /*! @file Initialization of the travelling Alfvèn-Wave test
  *
- * @author Lukas Schmidt
+ * @author Helena Schmidt
  */
 
 #pragma once

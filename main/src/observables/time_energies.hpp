@@ -25,7 +25,7 @@
 
 /*! @file
  * @brief output time and energies each iteration (default)
- * @author Lukas Schmidt
+ * @author Helena Schmidt
  */
 
 #include "conserved_quantities.hpp"

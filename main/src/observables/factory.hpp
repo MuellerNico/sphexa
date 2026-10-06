@@ -26,7 +26,7 @@
 /*! @file
  * @brief Select/calculate data to be printed to constants.txt each iteration
  *
- * @author Lukas Schmidt
+ * @author Helena Schmidt
  * @author Sebastian Keller <sebastian.f.keller@gmail.com>
  */
 

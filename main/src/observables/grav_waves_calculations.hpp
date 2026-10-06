@@ -26,7 +26,7 @@
 /*! @file calculations for the gravitational waves observable
  *          References: Centrella & McMillan ApJ, 416 (1993), R. M. Cabezon Phd Thesis (2010)
  *
- *  @author Lukas Schmidt
+ *  @author Helena Schmidt
  */
 
 #include <cmath>

@@ -21,7 +21,7 @@
 # SOFTWARE.
 
 __program__ = "compare_greshochan.py"
-__author__ = "Lukas Schmidt, Jose A. Escartin (ja.escartin@gmail.com)"
+__author__ = "Helena Schmidt, Jose A. Escartin (ja.escartin@gmail.com)"
 __version__ = "0.1.0"
 
 from argparse import ArgumentParser

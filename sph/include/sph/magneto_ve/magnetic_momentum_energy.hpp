@@ -24,7 +24,7 @@
 
 /*! @file calculates the momentum and energy with the magnetic stress tensor
  *
- * @author Lukas Schmidt
+ * @author Helena Schmidt
  *
  */
 
