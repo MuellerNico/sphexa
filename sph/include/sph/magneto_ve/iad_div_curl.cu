@@ -1,8 +1,7 @@
 /*
  * MIT License
  *
- * Copyright (c) 2024 CSCS, ETH Zurich
- *               2024 University of Basel
+ * Copyright (c) 2024 CSCS, ETH Zurich, University of Basel
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
