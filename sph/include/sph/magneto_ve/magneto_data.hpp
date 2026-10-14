@@ -75,7 +75,8 @@ public:
 
     // Artificial resistivity scheme (--resistivity)
     sph::magneto::ResistivityScheme resistivityScheme{sph::magneto::ResistivityScheme::SLR};
-    RealType                        alpha_B_const{1.0};
+    // Uniform alpha_B amplitude, used by every scheme except Switch
+    RealType alpha_B_const{1.0};
     // Resistivity switch bounds
     HydroType alpha_B_min{0.05};
     HydroType alpha_B_max{1.0};

@@ -125,13 +125,7 @@ struct DivBCurlBPostamble
         T divB = dBxdx + dBydy + dBzdz;
 
         T alpha_B;
-        if (scheme == ResistivityScheme::Constant) { alpha_B = alpha_B_const; }
-        else if (scheme == ResistivityScheme::SLR || scheme == ResistivityScheme::SLRB ||
-                 scheme == ResistivityScheme::SLRB2)
-        {
-            alpha_B = T(1);
-        }
-        else
+        if (scheme == ResistivityScheme::Switch)
         {
             // Switch (Tricco & Price 2013, eq. 16)
             T B_norm   = std::sqrt(Bxi * Bxi + Byi * Byi + Bzi * Bzi);
@@ -139,6 +133,10 @@ struct DivBCurlBPostamble
             if (alpha_Bi > alpha_B_max) alpha_Bi = alpha_B_max;
             if (alpha_Bi < alpha_B_min) alpha_Bi = alpha_B_min;
             alpha_B = alpha_Bi;
+        }
+        else
+        {
+            alpha_B = alpha_B_const;
         }
 
         return std::make_tuple(divB, divB_conj, curlB_x, curlB_y, curlB_z, gradB_norm, alpha_B, dBxdx, dBxdy, dBxdz,
