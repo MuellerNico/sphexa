@@ -76,8 +76,8 @@ protected:
                                              "psi_ch", "d_psi_ch", "d_psi_ch_m1">;
 
     //! @brief list of dependent fields, these may be used as scratch space during domain sync
-    using DependentFieldsHydro = FieldList<"ax", "ay", "az", "prho", "c", "p", "u", "du", "c11", "c12", "c13", "c22",
-                                           "c23", "c33", "xm", "kx", "nc", "divv", "curlv", "gradh", "dtCourant">;
+    using DependentFieldsHydro = FieldList<"ax", "ay", "az", "prho", "c", "p", "du", "c11", "c12", "c13", "c22", "c23",
+                                           "c33", "xm", "kx", "nc", "divv", "curlv", "gradh", "dtCourant">;
     using DependentFieldsMagneto =
         FieldList<"dvxdx", "dvxdy", " dvxdz", "dvydx", "dvydy", "dvydz", "dvzdx", "dvzdy", "dvzdz", "divB", "divB_conj",
                   "curlB_x", "curlB_y", "curlB_z", "gradB_norm", "alpha_B", "dBxdx", "dBxdy", "dBxdz", "dBydx", "dBydy",
@@ -184,7 +184,7 @@ public:
             timer.step("AVswitches");
         }
 
-        domain.exchangeHalos(get<"alpha", "gradh", "p", "u">(d), get<"ax">(d), get<"keys">(d));
+        domain.exchangeHalos(get<"alpha", "gradh", "p">(d), get<"ax">(d), get<"keys">(d));
         domain.exchangeHalos(get<"dvxdx", "dvxdy", " dvxdz", "dvydx", "dvydy", "dvydz", "dvzdx", "dvzdy", "dvzdz">(md),
                              get<"ax">(d), get<"keys">(d));
         timer.step("mpi::synchronizeHalos");

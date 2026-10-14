@@ -79,13 +79,13 @@ void computeMagneticMomentumEnergy(const GroupView& grp, float* groupDt, HydroDa
                                    const cstone::Box<typename HydroData::RealType>&)
 {
     magneticMomentumAndEnergyIjLoop<SLR>(
-        d.neighborhood, d.K, d.Kcour, m.mu_0, m.alpha_u, d.Atmin, d.Atmax, d.ramp, rawPtr(d.vx), rawPtr(d.vy),
-        rawPtr(d.vz), rawPtr(d.m), rawPtr(d.c), rawPtr(d.u), rawPtr(d.kx), rawPtr(d.alpha), rawPtr(d.xm), rawPtr(d.p),
-        rawPtr(d.gradh), rawPtr(d.c11), rawPtr(d.c12), rawPtr(d.c13), rawPtr(d.c22), rawPtr(d.c23), rawPtr(d.c33),
-        rawPtr(d.nc), rawPtr(m.Bx), rawPtr(m.By), rawPtr(m.Bz), rawPtr(m.dvxdx), rawPtr(m.dvxdy), rawPtr(m.dvxdz),
-        rawPtr(m.dvydx), rawPtr(m.dvydy), rawPtr(m.dvydz), rawPtr(m.dvzdx), rawPtr(m.dvzdy), rawPtr(m.dvzdz),
-        rawPtr(d.tdpdTrho), rawPtr(d.wh), d.avFloor, rawPtr(d.du), rawPtr(d.ax), rawPtr(d.ay), rawPtr(d.az),
-        rawPtr(d.divv), rawPtr(d.curlv), rawPtr(d.dtCourant));
+        d.neighborhood, d.K, d.Kcour, m.mu_0, d.Atmin, d.Atmax, d.ramp, rawPtr(d.vx), rawPtr(d.vy), rawPtr(d.vz),
+        rawPtr(d.m), rawPtr(d.c), rawPtr(d.kx), rawPtr(d.alpha), rawPtr(d.xm), rawPtr(d.p), rawPtr(d.gradh),
+        rawPtr(d.c11), rawPtr(d.c12), rawPtr(d.c13), rawPtr(d.c22), rawPtr(d.c23), rawPtr(d.c33), rawPtr(d.nc),
+        rawPtr(m.Bx), rawPtr(m.By), rawPtr(m.Bz), rawPtr(m.dvxdx), rawPtr(m.dvxdy), rawPtr(m.dvxdz), rawPtr(m.dvydx),
+        rawPtr(m.dvydy), rawPtr(m.dvydz), rawPtr(m.dvzdx), rawPtr(m.dvzdy), rawPtr(m.dvzdz), rawPtr(d.tdpdTrho),
+        rawPtr(d.wh), d.avFloor, rawPtr(d.du), rawPtr(d.ax), rawPtr(d.ay), rawPtr(d.az), rawPtr(d.divv),
+        rawPtr(d.curlv), rawPtr(d.dtCourant));
 
     float minDt = std::numeric_limits<float>::infinity();
     checkGpuErrors(cudaMemcpyToSymbolAsync(GPU_SYMBOL(minDt_ve_device), &minDt, sizeof(minDt)));

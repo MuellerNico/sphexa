@@ -96,7 +96,6 @@ int main(int argc, char** argv)
     const std::string        glassBlock   = parser.get("--glass");
     const std::string        propChoice   = parser.get("--prop", std::string("ve"));
     const std::string        resistivity  = parser.get("--resistivity", std::string("SLR"));
-    const double             conductivity = parser.get("--conductivity", 0.0);
     const std::string        maxStepStr   = parser.get("-s", std::string("200"));
     std::vector<std::string> writeExtra   = parser.getCommaList("--wextra");
     std::vector<std::string> outputFields = parser.getCommaList("-f");
@@ -183,8 +182,6 @@ int main(int argc, char** argv)
         }
 
         if (parser.exists("--arfloor")) { md.arFloor = parser.get<double>("--arfloor"); }
-
-        md.alpha_u = conductivity;
     }
 
     if (!parser.exists("-o")) { outFile += fileWriter->suffix(); }
@@ -331,9 +328,6 @@ void printHelp(char* name, int rank)
 
         printf("\t--arfloor NUM \t Floor F in the SLRB/SLRB2 resistivity clamp Lij = max(F, modulator).\n"
                "\t\t\t 1.0 disables the Lij floor [default: 1.0]\n\n");
-
-        printf("\t--conductivity NUM \t Artificial conductivity coefficient alpha_u for the magneto-ve propagator.\n"
-               "\t\t\t 0 disables the AV heat conduction term [default: 0]\n\n");
 
         printf("\t-s NUM \t\t int(NUM):  Number of iterations (time-steps) [200],\n\
                 \t real(NUM): Time of simulation (time-model)\n\n");

@@ -82,9 +82,6 @@ public:
     // 1.0 disables the modulation.
     HydroType arFloor{1.0};
 
-    // Artificial conductivity coefficient, set via --conductivity. 0 disables the AV heat conduction term.
-    RealType alpha_u{0.0};
-
     // Observables
     RealType eMag{0.0}, meanDivBError{0.0}, maxDivBError{0.0};
     // Total resistive heating rate dE_int/dt.
