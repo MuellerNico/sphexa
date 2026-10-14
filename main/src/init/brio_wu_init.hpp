@@ -191,6 +191,7 @@ public:
         settings_["numParticlesGlobal"] = double(numParticlesGlobal);
         BuiltinWriter attributeSetter(settings_);
         d.loadOrStoreAttributes(&attributeSetter);
+        md.loadOrStoreAttributes(&attributeSetter);
 
         size_t numLeft      = size_t(leftMulti[0]) * leftMulti[1] * leftMulti[2] * blockSize;
         T      leftVolume   = L * Lt * Lt;
@@ -273,6 +274,7 @@ public:
         settings_["numParticlesGlobal"] = double(numParticlesGlobal);
         BuiltinWriter attributeSetter(settings_);
         d.loadOrStoreAttributes(&attributeSetter);
+        md.loadOrStoreAttributes(&attributeSetter);
 
         T leftVolume   = L * Lt * Lt;
         T particleMass = leftVolume * settings_.at("rhoL") / numLeft;

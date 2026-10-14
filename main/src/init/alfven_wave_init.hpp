@@ -267,6 +267,7 @@ public:
         settings_["numParticlesGlobal"] = double(numParticlesGlobal);
         BuiltinWriter attributeSetter(settings_);
         d.loadOrStoreAttributes(&attributeSetter);
+        md.loadOrStoreAttributes(&attributeSetter);
 
         T volume       = globalBox.lx() * globalBox.ly() * globalBox.lz();
         T particleMass = volume * settings_.at("rho") / numParticlesGlobal;

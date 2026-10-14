@@ -182,6 +182,10 @@ int main(int argc, char** argv)
         }
 
         if (parser.exists("--arfloor")) { md.arFloor = parser.get<double>("--arfloor"); }
+        if (md.alpha_B_min > md.alpha_B_max)
+        {
+            throw std::runtime_error("alpha_B_min exceeds alpha_B_max");
+        }
     }
 
     if (!parser.exists("-o")) { outFile += fileWriter->suffix(); }
@@ -226,6 +230,7 @@ int main(int argc, char** argv)
         {
             fileWriter->addStep(domain.startIndex(), domain.endIndex(), outFile);
             simData.hydro.loadOrStoreAttributes(fileWriter.get());
+            simData.magneto.loadOrStoreAttributes(fileWriter.get());
             box.loadOrStore(fileWriter.get());
             propagator->saveFields(fileWriter.get(), domain.startIndex(), domain.endIndex(), simData, box);
             propagator->save(fileWriter.get());

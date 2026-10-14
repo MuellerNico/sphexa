@@ -62,7 +62,8 @@ void computeIadFullDivvCurlv(const GroupView& grp, HydroData& d, MagnetoData& m,
                     rawPtr(m.curlB_y), rawPtr(m.curlB_z), rawPtr(m.gradB_norm), rawPtr(m.alpha_B), rawPtr(m.dBxdx),
                     rawPtr(m.dBxdy), rawPtr(m.dBxdz), rawPtr(m.dBydx), rawPtr(m.dBydy), rawPtr(m.dBydz),
                     rawPtr(m.dBzdx),
-                    rawPtr(m.dBzdy), rawPtr(m.dBzdz), m.resistivityScheme, m.alpha_B_const);
+                    rawPtr(m.dBzdy), rawPtr(m.dBzdz), m.resistivityScheme, m.alpha_B_const,
+                    m.alpha_B_min, m.alpha_B_max);
 
     checkGpuErrors(cudaDeviceSynchronize());
 }

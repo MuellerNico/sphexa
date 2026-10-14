@@ -238,6 +238,7 @@ public:
         settings_["numParticlesGlobal"] = double(numParticlesGlobal);
         BuiltinWriter attributeSetter(settings_);
         d.loadOrStoreAttributes(&attributeSetter);
+        md.loadOrStoreAttributes(&attributeSetter);
 
         size_t numOuterAssembled = size_t(outerMulti[0]) * outerMulti[1] * outerMulti[2] * blockSize;
         T      outerVolume       = globalBox.lx() * globalBox.ly() * globalBox.lz();

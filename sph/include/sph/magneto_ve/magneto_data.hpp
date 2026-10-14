@@ -70,26 +70,22 @@ public:
     MagnetoData() {}
     MagnetoData(const MagnetoData&) = delete;
 
-    // Parameters, should maybe move the induction/dissipation constants here
+    // Parameters
     RealType mu_0{1.0};
-    // HydroType alpha_B_max{1.0}; // not wired up yet
-    // HydroType alpha_B_min{0.0};
 
-    // Artificial resistivity scheme, selected via --resistivity. alpha_B_const is used when scheme == Constant.
+    // Artificial resistivity scheme (--resistivity)
     sph::magneto::ResistivityScheme resistivityScheme{sph::magneto::ResistivityScheme::SLR};
     RealType                        alpha_B_const{1.0};
-    // Floor F in the SLR resistivity Balsara-like amplitude clamp Lij = max(F, modulator), set via --arfloor.
-    // 1.0 disables the modulation.
+    // Resistivity switch bounds
+    HydroType alpha_B_min{0.05};
+    HydroType alpha_B_max{1.0};
+    // Floor for SLRB(2) resistivity variants (--arfloor, 1.0 for disabled)
     HydroType arFloor{1.0};
 
     // Observables
     RealType eMag{0.0}, meanDivBError{0.0}, maxDivBError{0.0};
     // Total resistive heating rate dE_int/dt.
     RealType resHeating{0.0};
-
-     /*! @brief
-     * Name of each field as string for use e.g in HDF5 output. Order has to correspond to what's returned by data().
-     */
 
     //!@brief particle fields used for magneto-hydrodynamics
     FieldVector<RealType> Bx, By, Bz;             // Magnetic field components
@@ -123,17 +119,6 @@ public:
     // Diagnostic fields for dissipation-scheme studies
     FieldVector<RealType> dB_diss_x, dB_diss_y, dB_diss_z;
     FieldVector<RealType> du_diss;
-
-    /* Is this a good idea?
-     *
-     * //! @brief returns external magnetic field contribtion at @p pos and @p time
-     *
-    HOST_DEVICE_INLINE cstone::Vec3<RealType> externalMagneticField(const cstone::Vec3<RealType>& pos, const RealType
-    time)
-    {
-
-    }
-    */
 
     /*! @brief
      * Name of each field as string for use e.g in HDF5 output. Order has to correspond to what's returned by data().
@@ -269,6 +254,12 @@ public:
             }
         };
         optionalIO("mu_0", &mu_0, 1);
+
+        // artificial resistivity parameters. The scheme itself is CLI-only, like the AV SLR/switch choice.
+        optionalIO("alpha_B_const", &alpha_B_const, 1);
+        optionalIO("alpha_B_min", &alpha_B_min, 1);
+        optionalIO("alpha_B_max", &alpha_B_max, 1);
+        optionalIO("arFloor", &arFloor, 1);
     }
 };
 } // namespace sphexa::magneto

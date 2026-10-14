@@ -76,7 +76,8 @@ void computeIadFullDivvCurlv(const GroupView& grp, SimulationData& sim, const cs
                         md.curlB_y.data(), md.curlB_z.data(), md.gradB_norm.data(), md.alpha_B.data(),
                         md.dBxdx.data(), md.dBxdy.data(), md.dBxdz.data(), md.dBydx.data(), md.dBydy.data(),
                         md.dBydz.data(), md.dBzdx.data(),
-                        md.dBzdy.data(), md.dBzdz.data(), md.resistivityScheme, md.alpha_B_const);
+                        md.dBzdy.data(), md.dBzdz.data(), md.resistivityScheme, md.alpha_B_const,
+                        md.alpha_B_min, md.alpha_B_max);
     }
 }
 

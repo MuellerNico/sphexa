@@ -203,6 +203,7 @@ public:
         settings_["numParticlesGlobal"] = double(simData.hydro.numParticlesGlobal);
         BuiltinWriter attributeSetter(settings_);
         simData.hydro.loadOrStoreAttributes(&attributeSetter);
+        md.loadOrStoreAttributes(&attributeSetter);
         return box;
     }
 
