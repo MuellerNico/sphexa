@@ -275,7 +275,7 @@ struct MagneticMomentumAndEnergyPostambleWithDt : MagneticMomentumAndEnergyPosta
         T    v_alfven2        = (Bxi * Bxi + Byi * Byi + Bzi * Bzi) / (this->mu_0 * rhoi);
         T    magneticVsignal  = std::sqrt(ci * ci + v_alfven2);
 
-        // T dt = tsKCourant(maxvsignal, hi, magneticVsignal, Kcour); // less restrictive: ignores magneticVsignal when maxvsignal>0
+        // T dt = tsKCourant(maxvsignal, hi, magneticVsignal, Kcour);
         T dt = maxvsignal > T(0) ? stl::min(Kcour * hi / magneticVsignal, Kcour * hi / maxvsignal)
                                  : Kcour * hi / magneticVsignal;
         return std::make_tuple(du, grad_P_x, grad_P_y, grad_P_z, dt);

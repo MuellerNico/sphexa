@@ -256,7 +256,7 @@ public:
         };
         optionalIO("mu_0", &mu_0, 1);
 
-        // artificial resistivity parameters. The scheme itself is CLI-only, like the AV SLR/switch choice.
+        // artificial resistivity parameters
         optionalIO("alpha_B_const", &alpha_B_const, 1);
         optionalIO("alpha_B_min", &alpha_B_min, 1);
         optionalIO("alpha_B_max", &alpha_B_max, 1);

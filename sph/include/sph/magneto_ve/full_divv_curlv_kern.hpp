@@ -68,7 +68,7 @@ struct FullDivvCurlvInteraction
         termA[1] = -(c12i * rx + c22i * ry + c23i * rz) * Wi;
         termA[2] = -(c13i * rx + c23i * ry + c33i * rz) * Wi;
 
-        // per-pair contribution to the velocity-gradient rows dVx/dVy/dVz (summed over neighbors by the framework)
+        // per-pair contribution to the velocity-gradient rows dVx/dVy/dVz
         cstone::Vec3<T> dVx = (vx_ji * xmassj) * termA;
         cstone::Vec3<T> dVy = (vy_ji * xmassj) * termA;
         cstone::Vec3<T> dVz = (vz_ji * xmassj) * termA;

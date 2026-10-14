@@ -70,12 +70,12 @@ struct DivBCurlBInteraction
         termA[1] = -(c12i * rx + c22i * ry + c23i * rz) * Wi;
         termA[2] = -(c13i * rx + c23i * ry + c33i * rz) * Wi;
 
-        // per-pair contribution to the B-gradient rows dBx/dBy/dBz (summed over neighbors by the framework)
+        // per-pair contribution to the B-gradient rows dBx/dBy/dBz
         cstone::Vec3<T> dBx = (Bx_ji * xmassj) * termA;
         cstone::Vec3<T> dBy = (By_ji * xmassj) * termA;
         cstone::Vec3<T> dBz = (Bz_ji * xmassj) * termA;
 
-        // self-volume-weighted (no xm[j]) divergence sum for the conservative divB
+        // self-volume-weighted (no xm[j]) divergence sum
         T divBcons = Bx_ji * termA[0] + By_ji * termA[1] + Bz_ji * termA[2];
 
         return std::make_tuple(dBx[0], dBx[1], dBx[2], dBy[0], dBy[1], dBy[2], dBz[0], dBz[1], dBz[2], divBcons);
