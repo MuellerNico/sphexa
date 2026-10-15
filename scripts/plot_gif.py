@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Animated GIFs over a step range, for slice or shocktube plots.
 
-Reuses the `compute_*` / `render_*` / `shared_*` helpers from `plot_slice.py`
-and `plot_shocktube.py`. Slice grids (the expensive step) are computed in
+Reuses the compute/render helpers from `plot_slice.py` and
+`plot_shocktube.py`. Slice grids (the expensive step) are computed in
 parallel; frame rendering is cheap and serial. Ranges longer than `--max-frames`
 (default 100) are subsampled by striding.
 """
@@ -64,8 +64,12 @@ def make_slice_gif(fname, start, end, field='rho', resolution=256,
                    n_workers=None, max_frames=100):
     if n_workers is None:
         n_workers = min(cpu_count(), 16)
+    opt = plot_slice.Opts(field=field, resolution=resolution,
+                          slice_axis=slice_axis, slice_pos=slice_pos,
+                          title=title, vmin=vmin, vmax=vmax, cmap=cmap,
+                          layout=(1, 1))
     steps = _stride(start, end, max_frames)
-    work = [(fname, s, field, resolution, slice_axis, slice_pos) for s in steps]
+    work = [(fname, s, opt) for s in steps]
 
     print(f"Computing {len(steps)} slice grids using {n_workers} workers...")
     grids_by_step = {}
@@ -75,12 +79,12 @@ def make_slice_gif(fname, start, end, field='rho', resolution=256,
             print(f"  [{i + 1}/{len(steps)}] Step {g['step']} done", flush=True)
 
     ordered = [grids_by_step[s] for s in steps]
-    vmin, vmax = plot_slice.shared_ranges(ordered, vmin, vmax)
+    vmin, vmax = plot_slice.shared_ranges(ordered, opt)
     print(f"Shared {field} scale: [{vmin:.6f}, {vmax:.6f}]")
 
     print("Rendering frames and assembling GIF...")
-    frames = [_fig_to_frame(plot_slice.render_slice(g, slice_axis, title,
-                                                    vmin, vmax, cmap))
+    # one frame per step, each a single-panel figure on the shared color scale
+    frames = [_fig_to_frame(plot_slice.render([g], opt, vmin, vmax))
               for g in ordered]
 
     outdir = os.path.dirname(os.path.abspath(fname))
