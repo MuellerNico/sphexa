@@ -22,7 +22,7 @@
  * SOFTWARE.
  */
 
-/*! @file slope-limited reconstruction of the magnetic field for artificial resistivity
+/*! @file artificial resistivity kernels
  *
  * @author Nicolas Mueller
  */
@@ -95,6 +95,14 @@ mhdSLRCorrection(cstone::Vec3<Tc> R, Tc eta_ab, T eta_crit, T balsi, T balsj, cs
     T phi_ab  = T(0.5) * kappa_ab * vanLeer;
 
     return Tc(-phi_ab) * (Tc(balsi) * JBR_a + Tc(balsj) * JBR_b);
+}
+
+//! @brief Tricco & Price (2013, eq. 16) resistivity switch alpha_B = h |∇B| / |B|, clamped to [alpha_min, alpha_max]
+template<class T>
+HOST_DEVICE_FUN inline T resistivitySwitch(T h, T B_norm, T gradB_norm, T alpha_min, T alpha_max)
+{
+    T alpha = (B_norm > T(0)) ? h * gradB_norm / B_norm : alpha_max;
+    return stl::max(alpha_min, stl::min(alpha, alpha_max));
 }
 
 } // namespace sph::magneto

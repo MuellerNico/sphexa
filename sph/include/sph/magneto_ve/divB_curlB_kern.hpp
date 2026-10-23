@@ -35,6 +35,7 @@
 #include "sph/kernels.hpp"
 #include "sph/table_lookup.hpp"
 
+#include "mhd_kernels.hpp"
 #include "resistivity.hpp"
 
 namespace sph::magneto
@@ -109,6 +110,7 @@ struct DivBCurlBPostamble
         T curlB_y = norm_kxi * (dBxz - dBzx);
         T curlB_z = norm_kxi * (dByx - dBxy);
 
+        T B_norm     = std::sqrt(Bxi * Bxi + Byi * Byi + Bzi * Bzi);
         T gradB_norm = norm_kxi * std::sqrt(dBxx * dBxx + dBxy * dBxy + dBxz * dBxz + dByx * dByx + dByy * dByy +
                                             dByz * dByz + dBzx * dBzx + dBzy * dBzy + dBzz * dBzz);
 
@@ -124,20 +126,9 @@ struct DivBCurlBPostamble
 
         T divB = dBxdx + dBydy + dBzdz;
 
-        T alpha_B;
-        if (scheme == ResistivityScheme::Switch)
-        {
-            // Switch (Tricco & Price 2013, eq. 16)
-            T B_norm   = std::sqrt(Bxi * Bxi + Byi * Byi + Bzi * Bzi);
-            T alpha_Bi = (B_norm > 0) ? hi * gradB_norm / B_norm : alpha_B_max;
-            if (alpha_Bi > alpha_B_max) alpha_Bi = alpha_B_max;
-            if (alpha_Bi < alpha_B_min) alpha_Bi = alpha_B_min;
-            alpha_B = alpha_Bi;
-        }
-        else
-        {
-            alpha_B = alpha_B_const;
-        }
+        T alpha_B = (scheme == ResistivityScheme::Switch)
+                        ? resistivitySwitch(hi, B_norm, gradB_norm, alpha_B_min, alpha_B_max)
+                        : T(alpha_B_const);
 
         return std::make_tuple(divB, divB_conj, curlB_x, curlB_y, curlB_z, gradB_norm, alpha_B, dBxdx, dBxdy, dBxdz,
                                dBydx, dBydy, dBydz, dBzdx, dBzdy, dBzdz);
