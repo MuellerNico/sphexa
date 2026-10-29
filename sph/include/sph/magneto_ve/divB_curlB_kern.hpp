@@ -83,7 +83,7 @@ struct DivBCurlBInteraction
     }
 };
 
-template<class T, class Tc>
+template<bool MhdSLR, class T, class Tc>
 struct DivBCurlBPostamble
 {
     Tc                K;
@@ -114,28 +114,32 @@ struct DivBCurlBPostamble
         T gradB_norm = norm_kxi * std::sqrt(dBxx * dBxx + dBxy * dBxy + dBxz * dBxz + dByx * dByx + dByy * dByy +
                                             dByz * dByz + dBzx * dBzx + dBzy * dBzy + dBzz * dBzz);
 
-        T dBxdx = norm_kxi * dBxx;
-        T dBxdy = norm_kxi * dBxy;
-        T dBxdz = norm_kxi * dBxz;
-        T dBydx = norm_kxi * dByx;
-        T dBydy = norm_kxi * dByy;
-        T dBydz = norm_kxi * dByz;
-        T dBzdx = norm_kxi * dBzx;
-        T dBzdy = norm_kxi * dBzy;
-        T dBzdz = norm_kxi * dBzz;
-
-        T divB = dBxdx + dBydy + dBzdz;
+        T divB = norm_kxi * dBxx + norm_kxi * dByy + norm_kxi * dBzz;
 
         T alpha_B = (scheme == ResistivityScheme::Switch)
                         ? resistivitySwitch(hi, B_norm, gradB_norm, alpha_B_min, alpha_B_max)
                         : T(alpha_B_const);
 
-        return std::make_tuple(divB, divB_conj, curlB_x, curlB_y, curlB_z, gradB_norm, alpha_B, dBxdx, dBxdy, dBxdz,
-                               dBydx, dBydy, dBydz, dBzdx, dBzdy, dBzdz);
+        if constexpr (MhdSLR)
+        {
+            T dBxdx = norm_kxi * dBxx;
+            T dBxdy = norm_kxi * dBxy;
+            T dBxdz = norm_kxi * dBxz;
+            T dBydx = norm_kxi * dByx;
+            T dBydy = norm_kxi * dByy;
+            T dBydz = norm_kxi * dByz;
+            T dBzdx = norm_kxi * dBzx;
+            T dBzdy = norm_kxi * dBzy;
+            T dBzdz = norm_kxi * dBzz;
+            return std::make_tuple(divB, divB_conj, curlB_x, curlB_y, curlB_z, gradB_norm, alpha_B, dBxdx, dBxdy,
+                                   dBxdz, dBydx, dBydy, dBydz, dBzdx, dBzdy, dBzdz);
+        }
+        else { return std::make_tuple(divB, divB_conj, curlB_x, curlB_y, curlB_z, gradB_norm, alpha_B); }
     }
 };
 
-template<class Neighborhood, class Tc, class T>
+//! @brief the B-field Jacobian pointers are only written (and need only be allocated) if MhdSLR is true
+template<bool MhdSLR, class Neighborhood, class Tc, class T>
 void divBCurlBIjLoop(Neighborhood const& neighborhood, Tc K, const Tc* Bx, const Tc* By, const Tc* Bz, const T* kx,
                      const T* xm, const T* c11, const T* c12, const T* c13, const T* c22, const T* c23, const T* c33,
                      const T* gradh, const T* wh, T* divB, T* divB_conj, T* curlB_x, T* curlB_y, T* curlB_z,
@@ -143,10 +147,17 @@ void divBCurlBIjLoop(Neighborhood const& neighborhood, Tc K, const Tc* Bx, const
                      T* dBzdy, T* dBzdz, ResistivityScheme scheme, Tc alpha_B_const, T alpha_B_min, T alpha_B_max)
 {
     const auto input  = std::make_tuple(Bx, By, Bz, kx, xm, c11, c12, c13, c22, c23, c33, gradh);
-    const auto output = std::make_tuple(divB, divB_conj, curlB_x, curlB_y, curlB_z, gradB_norm, alpha_B, dBxdx, dBxdy,
-                                        dBxdz, dBydx, dBydy, dBydz, dBzdx, dBzdy, dBzdz);
-    neighborhood.ijLoop(input, output, DivBCurlBInteraction<T>{wh},
-                        DivBCurlBPostamble<T, Tc>{K, scheme, alpha_B_const, alpha_B_min, alpha_B_max});
+    const auto common = std::make_tuple(divB, divB_conj, curlB_x, curlB_y, curlB_z, gradB_norm, alpha_B);
+    const auto postamble =
+        DivBCurlBPostamble<MhdSLR, T, Tc>{K, scheme, alpha_B_const, alpha_B_min, alpha_B_max};
+
+    if constexpr (MhdSLR)
+    {
+        const auto output = std::tuple_cat(
+            common, std::make_tuple(dBxdx, dBxdy, dBxdz, dBydx, dBydy, dBydz, dBzdx, dBzdy, dBzdz));
+        neighborhood.ijLoop(input, output, DivBCurlBInteraction<T>{wh}, postamble);
+    }
+    else { neighborhood.ijLoop(input, common, DivBCurlBInteraction<T>{wh}, postamble); }
 }
 
 } // namespace sph::magneto

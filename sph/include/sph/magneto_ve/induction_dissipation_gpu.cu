@@ -39,11 +39,11 @@
 namespace sph::magneto::cuda
 {
 
-template<class HydroData, class MagnetoData>
+template<bool MhdSLR, class HydroData, class MagnetoData>
 void computeInductionAndDissipationGpu(const GroupView& grp, HydroData& d, MagnetoData& m,
                                        const cstone::Box<typename HydroData::RealType>&)
 {
-    inductionAndDissipationIjLoop(
+    inductionAndDissipationIjLoop<MhdSLR>(
         d.neighborhood, d.K, m.mu_0, m.resistivityScheme, m.arFloor, rawPtr(d.vx), rawPtr(d.vy), rawPtr(d.vz),
         rawPtr(d.c),
         rawPtr(m.Bx), rawPtr(m.By), rawPtr(m.Bz), rawPtr(d.m), rawPtr(d.xm), rawPtr(d.kx), rawPtr(d.gradh),
@@ -58,8 +58,13 @@ void computeInductionAndDissipationGpu(const GroupView& grp, HydroData& d, Magne
     checkGpuErrors(cudaDeviceSynchronize());
 }
 
-template void computeInductionAndDissipationGpu(const GroupView& grp, sphexa::ParticlesData<cstone::GpuTag>& d,
-                                                sphexa::magneto::MagnetoData<cstone::GpuTag>& m,
-                                                const cstone::Box<SphTypes::CoordinateType>&);
+#define INDUCTION_DISSIPATION(mhdSLR)                                                                                 \
+    template void computeInductionAndDissipationGpu<mhdSLR>(const GroupView& grp,                                     \
+                                                            sphexa::ParticlesData<cstone::GpuTag>& d,                 \
+                                                            sphexa::magneto::MagnetoData<cstone::GpuTag>& m,          \
+                                                            const cstone::Box<SphTypes::CoordinateType>&)
+
+INDUCTION_DISSIPATION(true);
+INDUCTION_DISSIPATION(false);
 
 } // namespace sph::magneto::cuda

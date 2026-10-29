@@ -42,4 +42,10 @@ enum class ResistivityScheme : int
     SLRB2    = 4, //!< SLR + Balsara-like modulation (1 - modulator^2)
 };
 
+//! @brief SLR-family schemes reconstruct B_ab and need the B-field Jacobian at i and j
+constexpr bool usesSLR(ResistivityScheme scheme)
+{
+    return scheme == ResistivityScheme::SLR || scheme == ResistivityScheme::SLRB || scheme == ResistivityScheme::SLRB2;
+}
+
 } // namespace sph::magneto

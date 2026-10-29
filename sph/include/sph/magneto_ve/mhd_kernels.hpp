@@ -30,6 +30,8 @@
 #pragma once
 
 #include <cmath>
+#include <tuple>
+#include <utility>
 
 #include "cstone/cuda/annotation.hpp"
 #include "cstone/primitives/math.hpp"
@@ -38,6 +40,33 @@
 
 namespace sph::magneto
 {
+
+namespace detail
+{
+template<std::size_t Offset, class Tuple, std::size_t... Is>
+inline constexpr auto tupleSelect(const Tuple& t, std::index_sequence<Is...>)
+{
+    return std::make_tuple(std::get<Offset + Is>(t)...);
+}
+} // namespace detail
+
+/*! @brief first @p N elements of @p t
+ *
+ * The ijLoop input tuple is shared between the interaction and the postamble, so a compile-time optional field
+ * block can only be appended at the end. tupleHead and tupleTail give each consumer the slice it needs.
+ */
+template<std::size_t N, class Tuple>
+inline constexpr auto tupleHead(const Tuple& t)
+{
+    return detail::tupleSelect<0>(t, std::make_index_sequence<N>{});
+}
+
+//! @brief elements [Offset, tuple_size) of @p t
+template<std::size_t Offset, class Tuple>
+inline constexpr auto tupleTail(const Tuple& t)
+{
+    return detail::tupleSelect<Offset>(t, std::make_index_sequence<std::tuple_size_v<Tuple> - Offset>{});
+}
 
 //! @brief 3x3 matrix-vector product where the matrix is given as its three rows; result type follows @p vec
 template<class Tv, class Tm>

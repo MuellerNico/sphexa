@@ -35,7 +35,7 @@
 namespace sph::magneto
 {
 
-template<class Tc, class SimulationData>
+template<bool MhdSLR, class Tc, class SimulationData>
 void computeInductionAndDissipation(const GroupView& grp, SimulationData& sim, const cstone::Box<Tc>& box)
 {
     auto& d  = sim.hydro;
@@ -43,11 +43,11 @@ void computeInductionAndDissipation(const GroupView& grp, SimulationData& sim, c
 
     if constexpr (cstone::HaveGpu<typename SimulationData::AcceleratorType>{})
     {
-        cuda::computeInductionAndDissipationGpu(grp, d, md, box);
+        cuda::computeInductionAndDissipationGpu<MhdSLR>(grp, d, md, box);
     }
     else
     {
-        inductionAndDissipationIjLoop(
+        inductionAndDissipationIjLoop<MhdSLR>(
             d.neighborhood, d.K, md.mu_0, md.resistivityScheme, md.arFloor, d.vx.data(), d.vy.data(), d.vz.data(),
             d.c.data(),
             md.Bx.data(), md.By.data(), md.Bz.data(), d.m.data(), d.xm.data(), d.kx.data(), d.gradh.data(),

@@ -115,6 +115,29 @@ int main(int argc, char** argv)
     sph::NeighborhoodType    nbChoice = nbTypeFromName(parser.get("--neighbor-search", std::string("always-traverse")));
     const bool               initFromFile = fs::exists(strBeforeSign(initCond, ":")) || fs::exists(strBeforeSign(initCond, ","));
 
+    const bool isMagneto = propChoice == "magneto-ve" || propChoice == "magneto-turb-ve";
+
+    // the resistivity scheme selects a propagator template specialization, so it has to be resolved before the
+    // factory call. alphaBConst is only applied for the Constant scheme.
+    using sph::magneto::ResistivityScheme;
+    ResistivityScheme resistivityScheme = ResistivityScheme::SLR;
+    double            alphaBConst       = 1.0;
+    if (resistivity == "switch") { resistivityScheme = ResistivityScheme::Switch; }
+    else if (resistivity == "SLR" || resistivity == "slr") { resistivityScheme = ResistivityScheme::SLR; }
+    else if (resistivity == "SLRB" || resistivity == "slrb") { resistivityScheme = ResistivityScheme::SLRB; }
+    else if (resistivity == "SLRB2" || resistivity == "slrb2") { resistivityScheme = ResistivityScheme::SLRB2; }
+    else if (isMagneto)
+    {
+        try { alphaBConst = std::stod(resistivity); }
+        catch (const std::exception&)
+        {
+            throw std::runtime_error("invalid --resistivity value '" + resistivity +
+                                     "': expected \"switch\", \"SLR\", \"SLRB\", \"SLRB2\", or a number");
+        }
+        resistivityScheme = ResistivityScheme::Constant;
+    }
+    const bool mhdSLR = isMagneto && sph::magneto::usesSLR(resistivityScheme);
+
     std::ofstream nullOutput("/dev/null");
     std::ostream& output = (quiet || rank) ? nullOutput : std::cout;
     std::ofstream constantsFile(fs::path(outFile).parent_path() / fs::path("constants.txt"));
@@ -123,7 +146,8 @@ int main(int argc, char** argv)
     auto fileWriter  = fileWriterFactory(ascii, MPI_COMM_WORLD);
     auto fileReader  = fileReaderFactory(ascii, MPI_COMM_WORLD);
     auto simInit     = initializerFactory<Dataset>(initCond, glassBlock, fileReader.get());
-    auto propagator  = propagatorFactory<Domain, Dataset>(propChoice, SLR, AVswitches, output, rank, simInit->constants());
+    auto propagator  = propagatorFactory<Domain, Dataset>(propChoice, SLR, mhdSLR, AVswitches, output, rank,
+                                                         simInit->constants());
     auto observables = observablesFactory<Dataset>(simInit->constants(), constantsFile);
 
     Dataset simData;
@@ -163,23 +187,10 @@ int main(int argc, char** argv)
     bool  haveGrav = (d.g != 0.0);
     float theta    = parser.get("--theta", haveGrav ? 0.5f : 1.0f);
 
-    if (propChoice == "magneto-ve" || propChoice == "magneto-turb-ve")
+    if (isMagneto)
     {
-        using sph::magneto::ResistivityScheme;
-        if (resistivity == "switch") { md.resistivityScheme = ResistivityScheme::Switch; }
-        else if (resistivity == "SLR" || resistivity == "slr") { md.resistivityScheme = ResistivityScheme::SLR; }
-        else if (resistivity == "SLRB" || resistivity == "slrb") { md.resistivityScheme = ResistivityScheme::SLRB; }
-        else if (resistivity == "SLRB2" || resistivity == "slrb2") { md.resistivityScheme = ResistivityScheme::SLRB2; }
-        else
-        {
-            try { md.alpha_B_const = std::stod(resistivity); }
-            catch (const std::exception&)
-            {
-                throw std::runtime_error("invalid --resistivity value '" + resistivity +
-                                         "': expected \"switch\", \"SLR\", \"SLRB\", \"SLRB2\", or a number");
-            }
-            md.resistivityScheme = ResistivityScheme::Constant;
-        }
+        md.resistivityScheme = resistivityScheme;
+        if (resistivityScheme == ResistivityScheme::Constant) { md.alpha_B_const = alphaBConst; }
 
         if (parser.exists("--arfloor")) { md.arFloor = parser.get<double>("--arfloor"); }
         if (md.alpha_B_min > md.alpha_B_max)

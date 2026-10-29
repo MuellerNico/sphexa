@@ -40,7 +40,7 @@
 namespace sph::magneto::cuda
 {
 
-template<class HydroData, class MagnetoData>
+template<bool MhdSLR, class HydroData, class MagnetoData>
 void computeIadFullDivvCurlv(const GroupView& grp, HydroData& d, MagnetoData& m,
                              const cstone::Box<typename HydroData::RealType>&)
 {
@@ -56,20 +56,23 @@ void computeIadFullDivvCurlv(const GroupView& grp, HydroData& d, MagnetoData& m,
                         rawPtr(m.dvxdz), rawPtr(m.dvydx), rawPtr(m.dvydy), rawPtr(m.dvydz), rawPtr(m.dvzdx),
                         rawPtr(m.dvzdy), rawPtr(m.dvzdz));
 
-    divBCurlBIjLoop(d.neighborhood, d.K, rawPtr(m.Bx), rawPtr(m.By), rawPtr(m.Bz), rawPtr(d.kx), rawPtr(d.xm),
-                    rawPtr(d.c11), rawPtr(d.c12), rawPtr(d.c13), rawPtr(d.c22), rawPtr(d.c23), rawPtr(d.c33),
-                    rawPtr(d.gradh), rawPtr(d.wh), rawPtr(m.divB), rawPtr(m.divB_conj), rawPtr(m.curlB_x),
-                    rawPtr(m.curlB_y), rawPtr(m.curlB_z), rawPtr(m.gradB_norm), rawPtr(m.alpha_B), rawPtr(m.dBxdx),
-                    rawPtr(m.dBxdy), rawPtr(m.dBxdz), rawPtr(m.dBydx), rawPtr(m.dBydy), rawPtr(m.dBydz),
-                    rawPtr(m.dBzdx),
-                    rawPtr(m.dBzdy), rawPtr(m.dBzdz), m.resistivityScheme, m.alpha_B_const,
-                    m.alpha_B_min, m.alpha_B_max);
+    divBCurlBIjLoop<MhdSLR>(d.neighborhood, d.K, rawPtr(m.Bx), rawPtr(m.By), rawPtr(m.Bz), rawPtr(d.kx),
+                            rawPtr(d.xm), rawPtr(d.c11), rawPtr(d.c12), rawPtr(d.c13), rawPtr(d.c22), rawPtr(d.c23),
+                            rawPtr(d.c33), rawPtr(d.gradh), rawPtr(d.wh), rawPtr(m.divB), rawPtr(m.divB_conj),
+                            rawPtr(m.curlB_x), rawPtr(m.curlB_y), rawPtr(m.curlB_z), rawPtr(m.gradB_norm),
+                            rawPtr(m.alpha_B), rawPtr(m.dBxdx), rawPtr(m.dBxdy), rawPtr(m.dBxdz), rawPtr(m.dBydx),
+                            rawPtr(m.dBydy), rawPtr(m.dBydz), rawPtr(m.dBzdx), rawPtr(m.dBzdy), rawPtr(m.dBzdz),
+                            m.resistivityScheme, m.alpha_B_const, m.alpha_B_min, m.alpha_B_max);
 
     checkGpuErrors(cudaDeviceSynchronize());
 }
 
-template void computeIadFullDivvCurlv(const GroupView& grp, sphexa::ParticlesData<cstone::GpuTag>& d,
-                                      sphexa::magneto::MagnetoData<cstone::GpuTag>& m,
-                                      const cstone::Box<SphTypes::CoordinateType>&);
+#define IAD_FULL_DIVV_CURLV(mhdSLR)                                                                                   \
+    template void computeIadFullDivvCurlv<mhdSLR>(const GroupView& grp, sphexa::ParticlesData<cstone::GpuTag>& d,     \
+                                                  sphexa::magneto::MagnetoData<cstone::GpuTag>& m,                    \
+                                                  const cstone::Box<SphTypes::CoordinateType>&)
+
+IAD_FULL_DIVV_CURLV(true);
+IAD_FULL_DIVV_CURLV(false);
 
 } // namespace sph::magneto::cuda

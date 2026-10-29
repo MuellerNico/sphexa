@@ -45,7 +45,7 @@ namespace sphexa::magneto
 using namespace sph;
 using util::FieldList;
 
-template<bool SLR, class DomainType, class DataType>
+template<bool SLR, bool MhdSLR, class DomainType, class DataType>
 class MagnetoHydroProp : public Propagator<DomainType, DataType>
 {
 protected:
@@ -78,10 +78,15 @@ protected:
     //! @brief list of dependent fields, these may be used as scratch space during domain sync
     using DependentFieldsHydro = FieldList<"ax", "ay", "az", "prho", "c", "p", "du", "c11", "c12", "c13", "c22", "c23",
                                            "c33", "xm", "kx", "nc", "divv", "curlv", "gradh", "dtCourant">;
-    using DependentFieldsMagneto =
+    using DependentFieldsMagnetoCommon =
         FieldList<"dvxdx", "dvxdy", " dvxdz", "dvydx", "dvydy", "dvydz", "dvzdx", "dvzdy", "dvzdz", "divB", "divB_conj",
-                  "curlB_x", "curlB_y", "curlB_z", "gradB_norm", "alpha_B", "dBxdx", "dBxdy", "dBxdz", "dBydx", "dBydy",
-                  "dBydz", "dBzdx", "dBzdy", "dBzdz", "dB_diss_x", "dB_diss_y", "dB_diss_z", "du_diss">;
+                  "curlB_x", "curlB_y", "curlB_z", "gradB_norm", "alpha_B", "dB_diss_x", "dB_diss_y", "dB_diss_z",
+                  "du_diss">;
+    //! @brief the B-field Jacobian is only needed by the SLR-family resistivity schemes
+    using BGradientFields = FieldList<"dBxdx", "dBxdy", "dBxdz", "dBydx", "dBydy", "dBydz", "dBzdx", "dBzdy", "dBzdz">;
+    using DependentFieldsMagneto =
+        std::conditional_t<MhdSLR, util::FuseValueList<DependentFieldsMagnetoCommon, BGradientFields>,
+                           DependentFieldsMagnetoCommon>;
 
 public:
     MagnetoHydroProp(std::ostream& output, size_t rank, bool AVswitches)
@@ -89,6 +94,7 @@ public:
         , AVswitches_(AVswitches)
     {
         if (SLR && rank == 0) { std::cout << "SLR is activated" << std::endl; }
+        if (MhdSLR && rank == 0) { std::cout << "SLR resistivity is activated" << std::endl; }
         if (AVswitches_ && rank == 0) { std::cout << "AV switches are activated" << std::endl; }
     }
 
@@ -142,6 +148,10 @@ public:
 
         auto& d  = simData.hydro;
         auto& md = simData.magneto;
+        if (sph::magneto::usesSLR(md.resistivityScheme) != MhdSLR)
+        {
+            throw std::runtime_error("resistivity scheme does not match the MhdSLR propagator specialization");
+        }
         d.resize(domain.nParticlesWithHalos());
         md.resize(domain.nParticlesWithHalos());
         size_t first = domain.startIndex();
@@ -167,7 +177,7 @@ public:
         domain.exchangeHalos(get<"Bx", "By", "Bz">(md), get<"ax">(d), get<"keys">(d));
         timer.step("mpi::synchronizeHalos");
 
-        sph::magneto::computeIadFullDivvCurlv(groups_.view(), simData, domain.box());
+        sph::magneto::computeIadFullDivvCurlv<MhdSLR>(groups_.view(), simData, domain.box());
         d.minDtRho = rhoTimestep(first, last, d);
         timer.step("IadDivCurlGradh");
 
@@ -195,12 +205,17 @@ public:
         // scratch: ax/ay/az hold the accelerations from computeMomentumEnergy, so prho stands in.
         // Not divv/curlv -- they survive to the dump as diagnostics; prho does not (recomputed by
         // computeEOS every step, already documented as destroyed by output time).
-        domain.exchangeHalos(get<"divB_conj", "curlB_x", "curlB_y", "curlB_z", "psi_ch", "alpha_B", "dBxdx", "dBxdy",
-                                 "dBxdz", "dBydx", "dBydy", "dBydz", "dBzdx", "dBzdy", "dBzdz">(md),
+        auto bJacobian = [&md]()
+        {
+            if constexpr (MhdSLR) { return get<BGradientFields>(md); }
+            else { return std::tuple<>{}; }
+        }();
+        domain.exchangeHalos(std::tuple_cat(get<"divB_conj", "curlB_x", "curlB_y", "curlB_z", "psi_ch", "alpha_B">(md),
+                                            bJacobian),
                              get<"prho">(d), get<"keys">(d));
         timer.step("mpi::synchronizeHalos");
 
-        sph::magneto::computeInductionAndDissipation(groups_.view(), simData, domain.box());
+        sph::magneto::computeInductionAndDissipation<MhdSLR>(groups_.view(), simData, domain.box());
         timer.step("InductionAndDissipation");
         pmReader.step();
 
